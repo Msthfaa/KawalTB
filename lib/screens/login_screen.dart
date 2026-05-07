@@ -4,7 +4,7 @@ import '../core/app_colors.dart';
 import '../screens/register_screen.dart';
 import '../widgets/kawal_logo.dart';
 import '../widgets/kawal_text_field.dart';
-import 'dashboard_screen.dart';
+import 'main_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,18 +14,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // ─── Form key & controllers ────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // ─── UI state ─────────────────────────────────────────────────────────────
+  final supabase = Supabase.instance.client;
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  String? _errorMessage;
 
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
   @override
   void dispose() {
     _emailController.dispose();
@@ -33,44 +31,53 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // ─── Auth handler — ready for Supabase integration ────────────────────────
-  /// Replace the [Future.delayed] body with your Supabase auth call:
-  ///   final response = await Supabase.instance.client.auth.signInWithPassword(
-  ///     email: _emailController.text.trim(),
-  ///     password: _passwordController.text,
-  ///   );
   Future<void> _handleLogin() async {
-    // Hide keyboard & clear previous error
     FocusScope.of(context).unfocus();
-    setState(() => _errorMessage = null);
 
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      // Step 1: Sign in with Supabase Auth
+      await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
       );
 
       if (!mounted) return;
 
-      // Navigate to Dashboard, clearing auth stack
+      // Step 2: Navigate to Dashboard
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => const MainShell()),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login gagal: ${e.message}'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      debugPrint('Login Error: $e');
-      setState(() => _errorMessage = 'Login gagal: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Terjadi kesalahan: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ─── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
@@ -83,7 +90,9 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: size.height - MediaQuery.paddingOf(context).vertical),
+              constraints: BoxConstraints(
+                minHeight: size.height - MediaQuery.paddingOf(context).vertical,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -119,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     emailController: _emailController,
                     passwordController: _passwordController,
                     isLoading: _isLoading,
-                    errorMessage: _errorMessage,
                     obscurePassword: _obscurePassword,
                     rememberMe: _rememberMe,
                     onTogglePassword: () => setState(() => _obscurePassword = !_obscurePassword),
@@ -181,7 +189,6 @@ class _LoginCard extends StatelessWidget {
     required this.emailController,
     required this.passwordController,
     required this.isLoading,
-    required this.errorMessage,
     required this.obscurePassword,
     required this.rememberMe,
     required this.onTogglePassword,
@@ -194,7 +201,6 @@ class _LoginCard extends StatelessWidget {
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final bool isLoading;
-  final String? errorMessage;
   final bool obscurePassword;
   final bool rememberMe;
   final VoidCallback onTogglePassword;
@@ -237,12 +243,6 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Error banner
-            if (errorMessage != null) ...[
-              _ErrorBanner(message: errorMessage!),
-              const SizedBox(height: 16),
-            ],
 
             // Email
             KawalTextField(
@@ -379,7 +379,6 @@ class _GoogleButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Simple "G" letter as a substitute for the Google icon
             Container(
               width: 20,
               height: 20,
@@ -408,37 +407,6 @@ class _GoogleButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.errorSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(fontSize: 12, color: AppColors.error),
-            ),
-          ),
-        ],
       ),
     );
   }

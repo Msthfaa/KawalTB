@@ -14,20 +14,18 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // ─── Form key & controllers ────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // ─── UI state ─────────────────────────────────────────────────────────────
+  final supabase = Supabase.instance.client;
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
-  String? _errorMessage;
 
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
   @override
   void dispose() {
     _nameController.dispose();
@@ -37,45 +35,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // ─── Auth handler — ready for Supabase integration ────────────────────────
-  /// Replace the [Future.delayed] body with your Supabase auth call:
-  ///   final response = await Supabase.instance.client.auth.signUp(
-  ///     email: _emailController.text.trim(),
-  ///     password: _passwordController.text,
-  ///     data: {'full_name': _nameController.text.trim()},
-  ///   );
   Future<void> _handleRegister() async {
     FocusScope.of(context).unfocus();
-    setState(() => _errorMessage = null);
 
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        data: {'full_name': _nameController.text.trim()},
+      final email = _emailController.text.trim();
+      final fullName = _nameController.text.trim();
+      final password = _passwordController.text;
+
+      // Step 1: Sign up with Supabase Auth
+      final AuthResponse res = await supabase.auth.signUp(
+        email: email,
+        password: password,
       );
+
+      // Step 2: Insert profile into public 'users' table
+      if (res.user != null) {
+        await supabase.from('users').insert({
+          'nama_lengkap': fullName,
+          'email': email,
+        });
+      }
 
       if (!mounted) return;
 
-      // Navigate to Dashboard, clearing auth stack
+      // Step 3: Navigate to Dashboard
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
       );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan data: ${e.message}'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      debugPrint('Register Error: $e');
-      setState(() => _errorMessage = 'Pendaftaran gagal: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Terjadi kesalahan: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ─── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,12 +147,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Error banner
-                      if (_errorMessage != null) ...[
-                        _ErrorBanner(message: _errorMessage!),
-                        const SizedBox(height: 16),
-                      ],
-
                       // Full Name
                       KawalTextField(
                         controller: _nameController,
@@ -279,7 +297,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     GestureDetector(
                       onTap: () {
-                        // Pop back to Login if in stack, otherwise push
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);
                         } else {
@@ -305,39 +322,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ─── Private widgets ──────────────────────────────────────────────────────────
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.errorSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(fontSize: 12, color: AppColors.error),
-            ),
-          ),
-        ],
       ),
     );
   }
