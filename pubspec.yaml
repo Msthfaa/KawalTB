@@ -34,7 +34,7 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Google Fonts — provides the Inter typeface used in Kawal TB
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
   supabase_flutter: ^2.12.4
 
   # ── Supabase Integration (uncomment when ready) ──────────────────────────

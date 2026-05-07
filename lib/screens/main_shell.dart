@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../widgets/kawal_bottom_nav_bar.dart';
 import 'dashboard_screen.dart';
+import 'diagnosa_detail_screen.dart';
 import 'faskes_map_screen.dart';
 
 /// The main shell that hosts all tab screens and the bottom navigation bar.
@@ -30,7 +31,7 @@ class _MainShellState extends State<MainShell> {
   // Keep all screens alive with IndexedStack so state is preserved across tabs.
   static const List<Widget> _screens = [
     DashboardScreen(),          // 0 – Beranda
-    _PlaceholderScreen(label: 'Diagnosa', icon: Icons.medical_information_rounded),
+    DiagnosaDetailScreen(),     // 1 – Diagnosa
     _PlaceholderScreen(label: 'Alarm', icon: Icons.alarm_rounded),
     FaskesMapScreen(),          // 3 – Maps
     _PlaceholderScreen(label: 'Profil', icon: Icons.person_rounded),
