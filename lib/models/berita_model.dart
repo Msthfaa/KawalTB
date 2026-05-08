@@ -16,6 +16,7 @@ class BeritaModel {
   final BeritaCategory category;
   final Color imageBgColor;
   final IconData imageIcon;
+  final String? imageAsset;
 
   const BeritaModel({
     required this.id,
@@ -25,6 +26,7 @@ class BeritaModel {
     required this.category,
     required this.imageBgColor,
     required this.imageIcon,
+    this.imageAsset,
   });
 
   String get categoryLabel {
@@ -68,6 +70,7 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.laporan,
     imageBgColor: Color(0xFF00796B),
     imageIcon: Icons.assignment_rounded,
+    imageAsset: 'assets/images/news_laporan.png',
   ),
   const BeritaModel(
     id: 'brt-002',
@@ -78,6 +81,7 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.edukasi,
     imageBgColor: Color(0xFF0288D1),
     imageIcon: Icons.wash_rounded,
+    imageAsset: 'assets/images/news_pencegahan.png',
   ),
   const BeritaModel(
     id: 'brt-003',
@@ -88,6 +92,7 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.pengobatan,
     imageBgColor: Color(0xFF5C6BC0),
     imageIcon: Icons.medication_rounded,
+    imageAsset: 'assets/images/news_pengobatan.png',
   ),
   const BeritaModel(
     id: 'brt-004',
@@ -98,6 +103,7 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.gejala,
     imageBgColor: Color(0xFFE53935),
     imageIcon: Icons.coronavirus_rounded,
+    imageAsset: 'assets/images/news_gejala.png',
   ),
   const BeritaModel(
     id: 'brt-005',
@@ -107,6 +113,7 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.edukasi,
     imageBgColor: Color(0xFF00796B),
     imageIcon: Icons.search_rounded,
+    imageAsset: 'assets/images/news_laporan.png',
   ),
   const BeritaModel(
     id: 'brt-006',
@@ -116,5 +123,6 @@ final List<BeritaModel> dummyBeritaList = [
     category: BeritaCategory.edukasi,
     imageBgColor: Color(0xFF0288D1),
     imageIcon: Icons.fact_check_rounded,
+    imageAsset: 'assets/images/news_pencegahan.png',
   ),
 ];

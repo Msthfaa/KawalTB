@@ -8,38 +8,120 @@ class DiagnosaDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Memahami Gejala Awal TBC',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.menu,
-              color: AppColors.textSecondary,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8.0, top: 8.0),
+          child: CircleAvatar(
+            backgroundColor: Colors.black.withValues(alpha: 0.3),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.white),
+              onPressed: () => Navigator.pop(context),
             ),
-            onPressed: () {},
           ),
-        ],
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Intro Text ────────────────────────────────────────
+            // ── Top Banner Image ──────────────────────────────────────
+            Image.asset(
+              'assets/images/banner_gejala.png',
+              width: double.infinity,
+              height: 320,
+              fit: BoxFit.cover,
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Tags ──────────────────────────────────────────────
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF64748B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Edukasi',
+                          style: TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '5 Min Baca',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // ── Title ──────────────────────────────────────────────
+                  const Text(
+                    'Memahami Gejala\nAwal TBC',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // ── Author ──────────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.add_box_rounded, color: AppColors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Tim Medis Kawal TB',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              '12 Oktober 2023',
+                              style: TextStyle(fontSize: 11, color: AppColors.textHint),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // ── Intro Text ────────────────────────────────────────
             const Text(
               'Tuberculosis (TBC) adalah penyakit menular yang disebabkan oleh bakteri Mycobacterium tuberculosis. '
               'Gejala awal TBC seringkali tidak spesifik, sehingga penting untuk mengenali tanda-tanda awal '
@@ -84,30 +166,35 @@ class DiagnosaDetailScreen extends StatelessWidget {
 
             // ── Symptom Cards ──────────────────────────────────────
             _SymptomCard(
-              icon: Icons.thermostat_rounded,
-              title: 'Demam Terus-menerus Selama 3 Hari atau Lebih',
-              description: 'Suhu tubuh meningkat tanpa ada penyebab jelas.',
-            ),
-            const SizedBox(height: 12),
-            _SymptomCard(
-              icon: Icons.sick_rounded,
+              icon: Icons.coronavirus_rounded,
+              iconColor: const Color(0xFFE53935),
+              iconBg: const Color(0xFFFFEBEE),
               title: 'Batuk Berkepanjangan',
-              description:
-                  'Batuk yang berlangsung lebih dari 2 minggu, seringkali disertai dahak berdarah.',
+              description: 'Batuk terus-menerus yang berlangsung lebih dari 2-3 minggu, terkadang disertai dahak atau darah.',
             ),
             const SizedBox(height: 12),
             _SymptomCard(
-              icon: Icons.nights_stay_rounded,
+              icon: Icons.thermostat_rounded,
+              iconColor: const Color(0xFF00796B),
+              iconBg: const Color(0xFFE0F2F1),
+              title: 'Demam Terutama Sore Hari',
+              description: 'Suhu tubuh meningkat, seringkali dirasakan pada sore hingga malam hari secara konsisten.',
+            ),
+            const SizedBox(height: 12),
+            _SymptomCard(
+              icon: Icons.water_drop_outlined,
+              iconColor: const Color(0xFF475569),
+              iconBg: const Color(0xFFF1F5F9),
               title: 'Keringat Malam',
-              description:
-                  'Keringat berlebihan saat tidur, meskipun ruangan tidak panas.',
+              description: 'Berkeringat berlebihan di malam hari meskipun cuaca tidak panas atau ruangan bersuhu sejuk.',
             ),
             const SizedBox(height: 12),
             _SymptomCard(
-              icon: Icons.trending_down_rounded,
-              title: 'Penurunan Berat Badan Drastis',
-              description:
-                  'Hilangnya nafsu makan dan penurunan berat badan tanpa alasan.',
+              icon: Icons.monitor_weight_outlined,
+              iconColor: const Color(0xFF475569),
+              iconBg: const Color(0xFFF1F5F9),
+              title: 'Penurunan Berat Badan',
+              description: 'Nafsu makan menurun drastis yang mengakibatkan penurunan berat badan tanpa sebab yang jelas.',
             ),
             const SizedBox(height: 28),
 
@@ -132,30 +219,66 @@ class DiagnosaDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // ── CTA Button ─────────────────────────────────────────
-            SizedBox(
+            // ── CTA Card ─────────────────────────────────────────
+            Container(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2ECC71),
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF006C45), // Dark green
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.medical_services_outlined, color: AppColors.white, size: 32),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Butuh Konsultasi?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.white,
+                    ),
                   ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Buat Janji Konsultasi',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Gunakan fitur Diagnosa awal di aplikasi\nKawal TB untuk panduan lebih lanjut.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white70,
+                      height: 1.4,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {},
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.white,
+                        foregroundColor: const Color(0xFF006C45),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Mulai Screening',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -166,11 +289,15 @@ class DiagnosaDetailScreen extends StatelessWidget {
 class _SymptomCard extends StatelessWidget {
   const _SymptomCard({
     required this.icon,
+    required this.iconColor,
+    required this.iconBg,
     required this.title,
     required this.description,
   });
 
   final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
   final String title;
   final String description;
 
@@ -197,10 +324,10 @@ class _SymptomCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColors.primarySurface,
+              color: iconBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 22),
+            child: Icon(icon, color: iconColor, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(

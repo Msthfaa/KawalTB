@@ -182,44 +182,50 @@ class _KawalBottomNavBarState extends State<KawalBottomNavBar>
               alignment: Alignment.center,
               children: [
                 // ── Sliding active pill indicator ───────────────────────
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Replicate spaceAround: center of item i =
-                    //   navWidth * (2i + 1) / (2 * n)
-                    final navWidth = constraints.maxWidth;
-                    final n = _navItems.length;
-                    return AnimatedBuilder(
-                      animation: _indicatorAnimation,
-                      builder: (context, _) {
-                        final i = _indicatorAnimation.value;
-                        final centerX = navWidth * (2 * i + 1) / (2 * n);
-                        const indicatorW = 48.0;
-                        return Positioned(
-                          left: centerX - indicatorW / 2,
-                          top: 10,
-                          child: Container(
-                            width: indicatorW,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [AppColors.primary, AppColors.primaryLight],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.35),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+                Positioned.fill(
+                  top: 10,
+                  bottom: 10,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Replicate spaceAround: center of item i =
+                      //   navWidth * (2i + 1) / (2 * n)
+                      final navWidth = constraints.maxWidth;
+                      final n = _navItems.length;
+                      return AnimatedBuilder(
+                        animation: _indicatorAnimation,
+                        builder: (context, _) {
+                          final i = _indicatorAnimation.value;
+                          final centerX = navWidth * (2 * i + 1) / (2 * n);
+                          const indicatorW = 48.0;
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: Transform.translate(
+                              offset: Offset(centerX - indicatorW / 2, 0),
+                              child: Container(
+                                width: indicatorW,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [AppColors.primary, AppColors.primaryLight],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(alpha: 0.35),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
 
                 // ── Nav items ───────────────────────────────────────────
@@ -290,7 +296,7 @@ class _NavItemWidget extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? AppColors.primary : AppColors.textSecondary,
+                color: isActive ? AppColors.white : AppColors.textSecondary,
               ),
               child: Text(item.label),
             ),

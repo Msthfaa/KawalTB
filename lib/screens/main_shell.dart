@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../core/app_colors.dart';
+
 import '../widgets/kawal_bottom_nav_bar.dart';
 import 'dashboard_screen.dart';
 import 'diagnosa_detail_screen.dart';
 import 'faskes_map_screen.dart';
+import 'alarm_screen.dart';
+import 'profile_screen.dart';
 
 /// The main shell that hosts all tab screens and the bottom navigation bar.
 /// After a successful login, navigate here instead of [DashboardScreen].
@@ -32,9 +34,9 @@ class _MainShellState extends State<MainShell> {
   static const List<Widget> _screens = [
     DashboardScreen(),          // 0 – Beranda
     DiagnosaDetailScreen(),     // 1 – Diagnosa
-    _PlaceholderScreen(label: 'Alarm', icon: Icons.alarm_rounded),
+    AlarmScreen(),              // 2 - Alarm
     FaskesMapScreen(),          // 3 – Maps
-    _PlaceholderScreen(label: 'Profil', icon: Icons.person_rounded),
+    ProfileScreen(),            // 4 - Profil
   ];
 
 
@@ -55,49 +57,3 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Placeholder tabs (replace with real screens later)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({required this.label, required this.icon});
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.primarySurface,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(icon, color: AppColors.primary, size: 36),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Segera hadir',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -32,10 +32,10 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.white),
+          icon: const Icon(Icons.arrow_back, color: AppColors.primary),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -43,28 +43,53 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: AppColors.white,
+            color: AppColors.primary,
           ),
         ),
-        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: AppColors.white),
+            icon: const Icon(Icons.notifications_none_rounded, color: AppColors.primary),
             onPressed: () {},
           ),
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Search Bar ────────────────────────────────────────────
+          // ── Header Title ──────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Wawasan TBC',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Informasi terkini dan panduan seputar\nTuberkulosis.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Container(
-            color: AppColors.primary,
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Container(
-              height: 44,
+              height: 48,
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: AppColors.white,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: TextField(
                 decoration: InputDecoration(
@@ -103,9 +128,10 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primary
-                            : const Color(0xFFF1F5F9),
+                            ? const Color(0xFF475569) // Dark gray/blue for active tab
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(20),
+                        border: isSelected ? null : Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Text(
                         tab,
@@ -133,7 +159,10 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
               itemCount: _filteredBerita.length,
               separatorBuilder: (_, _) => const SizedBox(height: 14),
               itemBuilder: (context, i) {
-                return _BeritaCard(berita: _filteredBerita[i]);
+                if (i == 0) {
+                  return _LargeBeritaCard(berita: _filteredBerita[i]);
+                }
+                return _SmallBeritaCard(berita: _filteredBerita[i]);
               },
             ),
           ),
@@ -143,8 +172,8 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
   }
 }
 
-class _BeritaCard extends StatelessWidget {
-  const _BeritaCard({required this.berita});
+class _LargeBeritaCard extends StatelessWidget {
+  const _LargeBeritaCard({required this.berita});
 
   final BeritaModel berita;
 
@@ -154,13 +183,7 @@ class _BeritaCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,35 +192,31 @@ class _BeritaCard extends StatelessWidget {
           Stack(
             children: [
               ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 child: Container(
-                  height: 140,
+                  height: 180,
                   width: double.infinity,
                   color: berita.imageBgColor,
-                  child: Icon(
-                    berita.imageIcon,
-                    color: AppColors.white,
-                    size: 48,
-                  ),
+                  child: berita.imageAsset != null
+                      ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
+                      : Icon(berita.imageIcon, color: AppColors.white, size: 48),
                 ),
               ),
               Positioned(
-                top: 10,
-                right: 10,
+                top: 12,
+                left: 12,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: berita.categoryColor,
-                    borderRadius: BorderRadius.circular(6),
+                    color: const Color(0xFFE2E8F0).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     berita.categoryLabel,
                     style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.white,
+                      color: AppColors.textPrimary,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -208,41 +227,131 @@ class _BeritaCard extends StatelessWidget {
 
           // ── Content ────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   berita.title,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                     height: 1.3,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Text(
                   berita.description,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: AppColors.textSecondary,
                     height: 1.4,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  berita.date,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textHint,
-                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 14, color: AppColors.textHint),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${berita.date} • 5 min baca',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textHint,
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallBeritaCard extends StatelessWidget {
+  const _SmallBeritaCard({required this.berita});
+
+  final BeritaModel berita;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          // ── Image Left ──────────────────────────────────────
+          ClipRRect(
+            borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+            child: Container(
+              height: 110,
+              width: 110,
+              color: berita.imageBgColor,
+              child: berita.imageAsset != null
+                  ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
+                  : Icon(berita.imageIcon, color: AppColors.white, size: 32),
+            ),
+          ),
+
+          // ── Content Right ────────────────────────────────────
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      berita.categoryLabel,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    berita.title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 12, color: AppColors.textHint),
+                      const SizedBox(width: 4),
+                      Text(
+                        berita.date,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
