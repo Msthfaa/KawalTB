@@ -5,8 +5,32 @@ import 'change_email_screen.dart';
 import 'change_password_screen.dart';
 import 'health_history_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String userName = 'Budi Santoso';
+  String userEmail = 'budi.santoso@email.com';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userName = prefs.getString('user_name') ?? 'Budi Santoso';
+      userEmail = prefs.getString('user_email') ?? 'budi.santoso@email.com';
+    });
+  }
 
   Widget _buildMenuItem(
       BuildContext context, {
@@ -58,13 +82,6 @@ class ProfileScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: CircleAvatar(
-            backgroundImage: const AssetImage('assets/images/profile_avatar.png'),
-            backgroundColor: AppColors.primarySurface,
-          ),
-        ),
         title: const Text(
           'Kawal TB',
           style: TextStyle(
@@ -110,45 +127,23 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Budi Santoso',
-              style: TextStyle(
+            Text(
+              userName,
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'budi.santoso@email.com',
-              style: TextStyle(
+            Text(
+              userEmail,
+              style: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.verified_user_outlined, size: 14, color: AppColors.primary),
-                  SizedBox(width: 6),
-                  Text(
-                    'Pasien Terverifikasi',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 32),
 
             // Menu List
