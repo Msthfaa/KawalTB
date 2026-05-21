@@ -16,9 +16,29 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    afterEvaluate {
+        val android = extensions.findByName("android")
+        if (android != null) {
+            try {
+                val getNamespace = android.javaClass.getMethod("getNamespace")
+                val setNamespace = android.javaClass.getMethod("setNamespace", String::class.java)
+                val currentNamespace = getNamespace.invoke(android) as? String
+                if (currentNamespace.isNullOrEmpty()) {
+                    val fallbackNamespace = "com.example.${project.name.replace("-", "_").replace(".", "_")}"
+                    setNamespace.invoke(android, fallbackNamespace)
+                }
+            } catch (e: Exception) {
+                // ignore if namespace property is not available
+            }
+        }
+    }
+}
+
+subprojects {
     project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+

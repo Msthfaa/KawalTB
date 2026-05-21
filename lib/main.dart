@@ -4,15 +4,34 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'screens/login_screen.dart';
+import 'services/hive_service.dart';
+import 'services/notification_service.dart';
+import 'services/sync_service.dart';
+import 'services/medication_repository.dart';
 
 Future<void> main() async { 
   WidgetsFlutterBinding.ensureInitialized();
 
-  // TODO: Initialize Supabase here:
+  // Initialize Supabase remote backend
   await Supabase.initialize(
     url: 'https://lkodhofqxftavmawoefe.supabase.co',
     anonKey: 'sb_publishable_yyZjO-fAICLYBWk4qbsZHg_vD0hvgfk', 
   );
+
+  // Initialize offline-first Hive database
+  await HiveService.initialize();
+
+  // Initialize local notifications & timezone alarm engine
+  await NotificationService.instance.initialize();
+
+  // Initialize Workmanager sync service and register periodic task
+  await SyncService.instance.initialize();
+  await SyncService.instance.registerPeriodicSync();
+
+  // Fetch remote updates asynchronously without blocking startup
+  MedicationRepository.instance.syncSchedulesFromSupabase().catchError((e) {
+    print('Initial schedules sync skipped: $e');
+  });
 
   // Set status bar style to match the light background
   SystemChrome.setSystemUIOverlayStyle(

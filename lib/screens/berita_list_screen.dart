@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../models/berita_model.dart';
+import '../models/article.dart';
+import '../services/news_service.dart';
+import 'article_detail_screen.dart';
+import 'notification_history_screen.dart';
 
 class BeritaListScreen extends StatefulWidget {
   const BeritaListScreen({super.key});
@@ -13,18 +17,101 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
   String _selectedTab = 'Semua';
   final List<String> _tabs = ['Semua', 'Pencegahan', 'Pengobatan'];
 
+  bool _isLoading = true;
+  List<BeritaModel> _allBerita = [];
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNews();
+  }
+
+  Future<void> _loadNews() async {
+    setState(() => _isLoading = true);
+    try {
+      final List<Article> articles = await NewsService().fetchTBCNews();
+      final mapped = <BeritaModel>[];
+      for (int i = 0; i < articles.length; i++) {
+        final art = articles[i];
+        // Determine category based on keywords
+        BeritaCategory category = BeritaCategory.edukasi;
+        final text = '${art.title} ${art.description}'.toLowerCase();
+        if (text.contains('cegah') || text.contains('vaksin') || text.contains('masker') || text.contains('pencegahan')) {
+          category = BeritaCategory.pencegahan;
+        } else if (text.contains('obat') || text.contains('minum') || text.contains('dosis') || text.contains('terapi') || text.contains('pengobatan')) {
+          category = BeritaCategory.pengobatan;
+        } else if (text.contains('gejala') || text.contains('tanda') || text.contains('batuk') || text.contains('demam')) {
+          category = BeritaCategory.gejala;
+        }
+        
+        mapped.add(BeritaModel(
+          id: 'api-$i',
+          title: art.title,
+          description: art.description,
+          date: 'Hari ini',
+          category: category,
+          imageBgColor: const Color(0xFF00796B),
+          imageIcon: Icons.newspaper_rounded,
+          imageUrl: art.image,
+          articleUrl: art.url,
+        ));
+      }
+      
+      setState(() {
+        _allBerita = mapped;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _allBerita = dummyBeritaList;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _openArticle(BeritaModel berita) {
+    final urlString = berita.articleUrl;
+    if (urlString == null || urlString.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArticleDetailScreen(
+          url: urlString,
+          title: berita.title,
+          description: berita.description,
+          imageUrl: berita.imageUrl,
+        ),
+      ),
+    );
+  }
+
   List<BeritaModel> get _filteredBerita {
-    if (_selectedTab == 'Semua') return dummyBeritaList.sublist(0, 4);
-    if (_selectedTab == 'Pencegahan') {
-      return dummyBeritaList
+    List<BeritaModel> temp;
+    if (_selectedTab == 'Semua') {
+      temp = _allBerita;
+    } else if (_selectedTab == 'Pencegahan') {
+      temp = _allBerita
           .where((b) =>
               b.category == BeritaCategory.edukasi ||
               b.category == BeritaCategory.pencegahan)
           .toList();
+    } else {
+      temp = _allBerita
+          .where((b) => b.category == BeritaCategory.pengobatan)
+          .toList();
     }
-    return dummyBeritaList
-        .where((b) => b.category == BeritaCategory.pengobatan)
-        .toList();
+
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      temp = temp
+          .where((b) =>
+              b.title.toLowerCase().contains(query) ||
+              b.description.toLowerCase().contains(query))
+          .toList();
+    }
+
+    return temp;
   }
 
   @override
@@ -49,7 +136,14 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none_rounded, color: AppColors.primary),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -92,6 +186,11 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: TextField(
+                onChanged: (val) {
+                  setState(() {
+                    _searchQuery = val;
+                  });
+                },
                 decoration: InputDecoration(
                   hintText: 'Cari artikel...',
                   hintStyle: const TextStyle(
@@ -154,17 +253,38 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
 
           // ── News List ─────────────────────────────────────────────
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: _filteredBerita.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemBuilder: (context, i) {
-                if (i == 0) {
-                  return _LargeBeritaCard(berita: _filteredBerita[i]);
-                }
-                return _SmallBeritaCard(berita: _filteredBerita[i]);
-              },
-            ),
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _filteredBerita.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Tidak ada artikel ditemukan.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(20),
+                        itemCount: _filteredBerita.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (context, i) {
+                          final b = _filteredBerita[i];
+                          if (i == 0) {
+                            return _LargeBeritaCard(
+                              berita: b,
+                              onTap: () => _openArticle(b),
+                            );
+                          }
+                          return _SmallBeritaCard(
+                            berita: b,
+                            onTap: () => _openArticle(b),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -173,178 +293,104 @@ class _BeritaListScreenState extends State<BeritaListScreen> {
 }
 
 class _LargeBeritaCard extends StatelessWidget {
-  const _LargeBeritaCard({required this.berita});
+  const _LargeBeritaCard({required this.berita, required this.onTap});
 
   final BeritaModel berita;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Image Header ──────────────────────────────────────
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Container(
-                  height: 180,
-                  width: double.infinity,
-                  color: berita.imageBgColor,
-                  child: berita.imageAsset != null
-                      ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
-                      : Icon(berita.imageIcon, color: AppColors.white, size: 48),
-                ),
-              ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0).withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    berita.categoryLabel,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // ── Content ────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Image Header ──────────────────────────────────────
+            Stack(
               children: [
-                Text(
-                  berita.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                    height: 1.3,
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Container(
+                    height: 180,
+                    width: double.infinity,
+                    color: berita.imageBgColor,
+                    child: berita.imageUrl != null && berita.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            berita.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(berita.imageIcon, color: AppColors.white, size: 48);
+                            },
+                          )
+                        : berita.imageAsset != null
+                            ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
+                            : Icon(berita.imageIcon, color: AppColors.white, size: 48),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  berita.description,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 14, color: AppColors.textHint),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${berita.date} • 5 min baca',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textHint,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SmallBeritaCard extends StatelessWidget {
-  const _SmallBeritaCard({required this.berita});
-
-  final BeritaModel berita;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          // ── Image Left ──────────────────────────────────────
-          ClipRRect(
-            borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-            child: Container(
-              height: 110,
-              width: 110,
-              color: berita.imageBgColor,
-              child: berita.imageAsset != null
-                  ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
-                  : Icon(berita.imageIcon, color: AppColors.white, size: 32),
-            ),
-          ),
-
-          // ── Content Right ────────────────────────────────────
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
+                      color: const Color(0xFFE2E8F0).withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       berita.categoryLabel,
                       style: const TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
+                        color: AppColors.textPrimary,
+                        letterSpacing: 0.5,
                       ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // ── Content ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    berita.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      height: 1.3,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    berita.title,
+                    berita.description,
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      height: 1.2,
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 12, color: AppColors.textHint),
-                      const SizedBox(width: 4),
+                      const Icon(Icons.access_time, size: 14, color: AppColors.textHint),
+                      const SizedBox(width: 6),
                       Text(
-                        berita.date,
+                        '${berita.date} • 5 min baca',
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: AppColors.textHint,
                         ),
                       ),
@@ -353,8 +399,106 @@ class _SmallBeritaCard extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallBeritaCard extends StatelessWidget {
+  const _SmallBeritaCard({required this.berita, required this.onTap});
+
+  final BeritaModel berita;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            // ── Image Left ──────────────────────────────────────
+            ClipRRect(
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+              child: Container(
+                height: 110,
+                width: 110,
+                color: berita.imageBgColor,
+                child: berita.imageUrl != null && berita.imageUrl!.isNotEmpty
+                    ? Image.network(
+                        berita.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(berita.imageIcon, color: AppColors.white, size: 32);
+                        },
+                      )
+                    : berita.imageAsset != null
+                        ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
+                        : Icon(berita.imageIcon, color: AppColors.white, size: 32),
+              ),
+            ),
+
+            // ── Content Right ────────────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        berita.categoryLabel,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      berita.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time, size: 12, color: AppColors.textHint),
+                        const SizedBox(width: 4),
+                        Text(
+                          berita.date,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

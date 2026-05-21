@@ -1,15 +1,112 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../services/medication_repository.dart';
 
 class AddAlarmScreen extends StatefulWidget {
-  const AddAlarmScreen({super.key});
+  final String? initialCategory;
+  const AddAlarmScreen({super.key, this.initialCategory});
 
   @override
   State<AddAlarmScreen> createState() => _AddAlarmScreenState();
 }
 
 class _AddAlarmScreenState extends State<AddAlarmScreen> {
-  String _selectedCategory = 'Obat';
+  late String _selectedCategory;
+  TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  String _selectedFrequency = 'Harian (Setiap Hari)';
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = widget.initialCategory ?? 'Obat';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectTime(BuildContext context) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF006C45),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedTime) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
+  }
+
+  Future<void> _saveReminder() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nama pengingat tidak boleh kosong'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      // If there are notes, we can append them or save them as part of the medication name
+      final displayName = _notesController.text.isNotEmpty 
+          ? '$name (${_notesController.text})'
+          : name;
+
+      await MedicationRepository.instance.addNewSchedule(
+        displayName,
+        _selectedTime.hour,
+        _selectedTime.minute,
+        category: _selectedCategory,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pengingat berhasil disimpan'),
+            backgroundColor: Color(0xFF006C45),
+          ),
+        );
+        Navigator.pop(context, true); // Return true to refresh lists
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan pengingat: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,10 +148,10 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Time Picker ──────────────────────────────────────────
+              // ── Time Picker Trigger ──────────────────────────────────
               const Center(
                 child: Text(
-                  'Waktu Pengingat',
+                  'Waktu Pengingat (Ketuk untuk mengubah)',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -63,51 +160,57 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Text(
-                      '08',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF006C45),
+              GestureDetector(
+                onTap: () => _selectTime(context),
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Text(
+                        _selectedTime.hour.toString().padLeft(2, '0'),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF006C45),
+                        ),
                       ),
                     ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      ':',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        ':',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Text(
-                      '00',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF006C45),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Text(
+                        _selectedTime.minute.toString().padLeft(2, '0'),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF006C45),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
               const Divider(color: Color(0xFFF1F5F9), height: 1),
@@ -124,10 +227,14 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
               ),
               const SizedBox(height: 8),
               TextField(
+                controller: _nameController,
                 decoration: InputDecoration(
-                  hintText: 'Contoh: Rifampisin',
+                  hintText: _selectedCategory == 'Air' ? 'Contoh: Minum Air Pagi' : 'Contoh: Rifampisin',
                   hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                  prefixIcon: const Icon(Icons.medical_services_outlined, color: Color(0xFF94A3B8)),
+                  prefixIcon: Icon(
+                    _selectedCategory == 'Air' ? Icons.water_drop_outlined : Icons.medical_services_outlined,
+                    color: const Color(0xFF94A3B8),
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Color(0xFF94A3B8)),
@@ -253,7 +360,7 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
                     Expanded(
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: 'Harian (Setiap Hari)',
+                          value: _selectedFrequency,
                           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF94A3B8)),
                           items: ['Harian (Setiap Hari)', 'Mingguan', 'Sekali'].map((String value) {
                             return DropdownMenuItem<String>(
@@ -264,7 +371,11 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
                               ),
                             );
                           }).toList(),
-                          onChanged: (_) {},
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _selectedFrequency = val);
+                            }
+                          },
                         ),
                       ),
                     ),
@@ -284,6 +395,7 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
               ),
               const SizedBox(height: 8),
               TextField(
+                controller: _notesController,
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: 'Setelah makan...',
@@ -308,7 +420,7 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _isSaving ? null : _saveReminder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF006C45),
                     foregroundColor: AppColors.white,
@@ -320,12 +432,18 @@ class _AddAlarmScreenState extends State<AddAlarmScreen> {
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.save_outlined, size: 20),
-                      SizedBox(width: 8),
+                    children: [
+                      _isSaving 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_outlined, size: 20),
+                      const SizedBox(width: 8),
                       Text(
-                        'Simpan Pengingat',
-                        style: TextStyle(
+                        _isSaving ? 'Menyimpan...' : 'Simpan Pengingat',
+                        style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),

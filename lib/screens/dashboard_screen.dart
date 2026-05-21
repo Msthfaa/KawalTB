@@ -1,74 +1,354 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_colors.dart';
 import '../models/berita_model.dart';
+import '../models/medication_schedule.dart';
+import '../models/medication_log.dart';
+import '../services/hive_service.dart';
+import '../services/medication_repository.dart';
+import '../models/article.dart';
+import '../services/news_service.dart';
+import 'article_detail_screen.dart';
 import 'berita_list_screen.dart';
 import 'diagnosa_detail_screen.dart';
 import 'main_shell.dart';
+import 'notification_history_screen.dart';
 import 'add_alarm_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  List<MedicationSchedule> _medicationSchedules = [];
+  List<MedicationSchedule> _waterSchedules = [];
+  List<MedicationLog> _todayLogs = [];
+  bool _isLoading = true;
+  int _treatmentDay = 42;
+  String _userName = 'Budi';
+  List<BeritaModel> _newsArticles = dummyBeritaList;
+
+  StreamSubscription? _scheduleSubscription;
+  StreamSubscription? _logSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+    _loadUserName();
+
+    // Set up database listeners for auto-refresh
+    _scheduleSubscription = Hive.box<MedicationSchedule>('medication_schedules').watch().listen((_) {
+      _loadData();
+    });
+    _logSubscription = Hive.box<MedicationLog>('medication_logs').watch().listen((_) {
+      _loadData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scheduleSubscription?.cancel();
+    _logSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadUserName() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final fullName = prefs.getString('user_name') ?? 'Budi Santoso';
+      final firstName = fullName.split(' ').first;
+      setState(() {
+        _userName = firstName;
+      });
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final schedules = await HiveService.instance.getAllSchedules();
+      final logs = await HiveService.instance.getTodayLogs();
+      final allLogs = await HiveService.instance.getAllLogs();
+      
+      int day = 42;
+      final medSchedules = schedules.where((s) => s.isActive && (s.category == 'Obat' || s.category == null)).toList();
+      if (allLogs.isNotEmpty && medSchedules.isNotEmpty) {
+        final medNames = medSchedules.map((s) => s.medicationName).toSet();
+        final medLogs = allLogs.where((l) => medNames.contains(l.medicationName)).toList();
+        if (medLogs.isNotEmpty) {
+          medLogs.sort((a, b) => a.takenAt.compareTo(b.takenAt));
+          final firstLogDate = DateTime(medLogs.first.takenAt.year, medLogs.first.takenAt.month, medLogs.first.takenAt.day);
+          final todayDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+          day = todayDate.difference(firstLogDate).inDays + 1;
+        }
+      }
+
+      // Load news dynamically to sync with BeritaListScreen
+      List<BeritaModel> mappedNews = dummyBeritaList;
+      try {
+        final List<Article> articles = await NewsService().fetchTBCNews();
+        final List<BeritaModel> temp = [];
+        for (int i = 0; i < articles.length; i++) {
+          final art = articles[i];
+          BeritaCategory category = BeritaCategory.edukasi;
+          final text = '${art.title} ${art.description}'.toLowerCase();
+          if (text.contains('cegah') || text.contains('vaksin') || text.contains('masker') || text.contains('pencegahan')) {
+            category = BeritaCategory.pencegahan;
+          } else if (text.contains('obat') || text.contains('minum') || text.contains('dosis') || text.contains('terapi') || text.contains('pengobatan')) {
+            category = BeritaCategory.pengobatan;
+          } else if (text.contains('gejala') || text.contains('tanda') || text.contains('batuk') || text.contains('demam')) {
+            category = BeritaCategory.gejala;
+          }
+          temp.add(BeritaModel(
+            id: 'api-$i',
+            title: art.title,
+            description: art.description,
+            date: 'Hari ini',
+            category: category,
+            imageBgColor: const Color(0xFF00796B),
+            imageIcon: Icons.newspaper_rounded,
+            imageUrl: art.image,
+            articleUrl: art.url,
+          ));
+        }
+        if (temp.isNotEmpty) {
+          mappedNews = temp;
+        }
+      } catch (_) {
+        // use fallback dummyBeritaList
+      }
+
+      setState(() {
+        _medicationSchedules = medSchedules;
+        _waterSchedules = schedules.where((s) => s.isActive && s.category == 'Air').toList();
+        _todayLogs = logs;
+        _treatmentDay = day;
+        _newsArticles = mappedNews;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _openArticle(BeritaModel berita) {
+    final urlString = berita.articleUrl;
+    if (urlString == null || urlString.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArticleDetailScreen(
+          url: urlString,
+          title: berita.title,
+          description: berita.description,
+          imageUrl: berita.imageUrl,
+        ),
+      ),
+    );
+  }
+
+  void _showRecordMedicationSheet(BuildContext context) {
+    final untaken = _medicationSchedules.where((s) {
+      return !_todayLogs.any((l) => l.medicationName == s.medicationName);
+    }).toList();
+
+    if (untaken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Semua obat hari ini sudah Anda minum!'),
+          backgroundColor: Color(0xFF006C45),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Catat Minum Obat',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF006C45),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Pilih obat yang sudah Anda minum baru saja untuk dicatat.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.4,
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: untaken.length,
+                    itemBuilder: (context, index) {
+                      final schedule = untaken[index];
+                      final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: AppColors.primarySurface,
+                          child: Icon(Icons.medication, color: Color(0xFF006C45)),
+                        ),
+                        title: Text(schedule.medicationName),
+                        subtitle: Text('Jadwal: $timeText WIB'),
+                        trailing: ElevatedButton(
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            Navigator.pop(context);
+                            await MedicationRepository.instance.recordMedicationTaken(schedule);
+                            await _loadData();
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Berhasil mencatat "${schedule.medicationName}"'),
+                                backgroundColor: const Color(0xFF006C45),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF006C45),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Minum'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Calculate progress
+    final totalDoses = _medicationSchedules.length;
+    final takenDoses = _medicationSchedules.where((s) {
+      return _todayLogs.any((l) => l.medicationName == s.medicationName);
+    }).length;
+    final progress = totalDoses > 0 ? takenDoses / totalDoses : 0.0;
+
+    String nextScheduleText = 'Semua obat sudah diminum!';
+    if (_medicationSchedules.isNotEmpty) {
+      final untakenSchedules = _medicationSchedules.where((s) {
+        return !_todayLogs.any((l) => l.medicationName == s.medicationName);
+      }).toList();
+
+      if (untakenSchedules.isNotEmpty) {
+        untakenSchedules.sort((a, b) {
+          final cmp = a.hour.compareTo(b.hour);
+          if (cmp != 0) return cmp;
+          return a.minute.compareTo(b.minute);
+        });
+        final next = untakenSchedules.first;
+        nextScheduleText = 'Jadwal berikutnya: ${next.hour.toString().padLeft(2, '0')}:${next.minute.toString().padLeft(2, '0')} WIB';
+      }
+    } else {
+      nextScheduleText = 'Belum ada jadwal obat aktif.';
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ────────────────────────────────────────────────
-            _buildHeader(context),
-            const SizedBox(height: 20),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: const Color(0xFF006C45),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ────────────────────────────────────────────────
+              _buildHeader(context),
+              const SizedBox(height: 20),
 
-            // ── Greeting ──────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Halo, Budi!',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
+              if (_isLoading && _medicationSchedules.isEmpty && _waterSchedules.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 80.0),
+                    child: CircularProgressIndicator(color: Color(0xFF006C45)),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tetap semangat, Anda berada di jalur yang tepat menuju kesembuhan.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
-                    ),
+                )
+              else ...[
+                // ── Greeting ──────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Halo, $_userName!',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tetap semangat, Anda berada di jalur yang tepat menuju kesembuhan.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF475569),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
+                ),
+                const SizedBox(height: 20),
 
-            // ── Medication Card ───────────────────────────────────────
-            _buildMedicationCard(context),
-            const SizedBox(height: 16),
+                // ── Medication Card ───────────────────────────────────────
+                _buildMedicationCard(context, takenDoses, totalDoses, progress, nextScheduleText),
+                const SizedBox(height: 16),
 
-            // ── Water Intake ──────────────────────────────────────────
-            _buildWaterIntakeCard(context),
-            const SizedBox(height: 24),
+                // ── Water Intake ──────────────────────────────────────────
+                _buildWaterIntakeCard(context),
+                const SizedBox(height: 24),
 
-            // ── Health Check CTA ──────────────────────────────────────
-            _buildHealthCheckCard(context),
-            const SizedBox(height: 20),
+                // ── Health Check CTA ──────────────────────────────────────
+                _buildHealthCheckCard(context),
+                const SizedBox(height: 20),
 
-            // ── Quick Access Cards ────────────────────────────────────
-            _buildQuickAccessCards(context),
-            const SizedBox(height: 24),
+                // ── Quick Access Cards ────────────────────────────────────
+                _buildQuickAccessCards(context),
+                const SizedBox(height: 24),
 
-            // ── News Section ──────────────────────────────────────────
-            _buildNewsSection(context),
-            const SizedBox(height: 100),
-          ],
+                // ── News Section ──────────────────────────────────────────
+                _buildNewsSection(context),
+                const SizedBox(height: 100),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -77,7 +357,15 @@ class DashboardScreen extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.only(top: 48, left: 20, right: 20, bottom: 16),
-      color: AppColors.surface,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFE2E8F0),
+            width: 1.0,
+          ),
+        ),
+      ),
       child: Row(
         children: [
           CircleAvatar(
@@ -91,21 +379,23 @@ class DashboardScreen extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppColors.primary,
+              color: Color(0xFF006C45),
             ),
           ),
           const Spacer(),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
+            icon: const Icon(
               Icons.notifications_none_rounded,
-              color: AppColors.textSecondary,
-              size: 22,
+              color: Color(0xFF1E293B),
+              size: 24,
             ),
           ),
         ],
@@ -113,7 +403,13 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMedicationCard(BuildContext context) {
+  Widget _buildMedicationCard(
+    BuildContext context,
+    int takenDoses,
+    int totalDoses,
+    double progress,
+    String nextScheduleText,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
@@ -134,109 +430,117 @@ class DashboardScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.medical_services_rounded, color: AppColors.primary, size: 16),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Minum Obat',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFBEB),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Hari 42',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFF59E0B),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                Row(
+                  children: const [
+                    Icon(Icons.medical_services_rounded, color: Color(0xFF006C45), size: 20),
+                    SizedBox(width: 8),
                     Text(
-                      'Progres Hari Ini',
+                      'Minum Obat',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '1/2 Dosis',
-                      style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: 120,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: 0.5,
-                          backgroundColor: AppColors.textHint.withValues(alpha: 0.3),
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                          minHeight: 6,
-                        ),
+                        color: Color(0xFF006C45),
                       ),
                     ),
                   ],
                 ),
-                ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                    minimumSize: Size.zero,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF475569),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Text(
-                        'Catat',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.check_circle_outline, size: 16),
-                    ],
+                  child: Text(
+                    'Hari $_treatmentDay',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Progres Hari Ini',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  '$takenDoses/$totalDoses Dosis',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF006C45),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: const Color(0xFFE2E8F0),
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF006C45)),
+                minHeight: 8,
+              ),
+            ),
             const SizedBox(height: 12),
             Text(
-              'Jadwal berikutnya: 18:00 WIB',
-              style: TextStyle(
+              nextScheduleText,
+              style: const TextStyle(
                 fontSize: 12,
-                color: AppColors.textSecondary,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AddAlarmScreen(initialCategory: 'Obat'),
+                    ),
+                  );
+                  _loadData();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF004D30),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Catat',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -245,9 +549,106 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  void _showRecordWaterSheet(BuildContext context) {
+    final untaken = _waterSchedules.where((s) {
+      return !_todayLogs.any((l) => l.medicationName == s.medicationName);
+    }).toList();
+
+    if (untaken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Semua jadwal minum air hari ini sudah terpenuhi!'),
+          backgroundColor: Color(0xFF006C45),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Catat Minum Air',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF006C45),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Pilih jadwal minum air yang sudah Anda lakukan.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.4,
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: untaken.length,
+                    itemBuilder: (context, index) {
+                      final schedule = untaken[index];
+                      final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFE8F5EE),
+                          child: Icon(Icons.water_drop, color: Color(0xFF006C45)),
+                        ),
+                        title: Text(schedule.medicationName),
+                        subtitle: Text('Jadwal: $timeText WIB'),
+                        trailing: ElevatedButton(
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            Navigator.pop(context);
+                            await MedicationRepository.instance.recordMedicationTaken(schedule);
+                            await _loadData();
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Berhasil mencatat "${schedule.medicationName}"'),
+                                backgroundColor: const Color(0xFF006C45),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF006C45),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Minum'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildWaterIntakeCard(BuildContext context) {
-    const int filled = 5;
     const int total = 8;
+    final filled = _todayLogs.where((log) {
+      return log.medicationName == 'Minum Air' ||
+             _waterSchedules.any((ws) => ws.medicationName == log.medicationName);
+    }).length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -270,14 +671,14 @@ class DashboardScreen extends StatelessWidget {
           children: [
             Row(
               children: const [
-                Icon(Icons.water_drop, color: AppColors.textHint, size: 20),
+                Icon(Icons.water_drop, color: Color(0xFF94A3B8), size: 22),
                 SizedBox(width: 8),
                 Text(
                   'Minum Air',
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B),
                   ),
                 ),
               ],
@@ -287,12 +688,12 @@ class DashboardScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(total, (i) {
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: Container(
-                    width: 24,
+                    width: 14,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: i < filled ? AppColors.primary : const Color(0xFFE2E8F0),
+                      color: i < filled ? const Color(0xFF006C45) : const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -303,30 +704,34 @@ class DashboardScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '5/8 Gelas',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+                Text(
+                  '$filled/$total Gelas',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AddAlarmScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const AddAlarmScreen(initialCategory: 'Air'),
+                      ),
                     );
+                    _loadData();
                   },
                   child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySurface,
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE8F5EE),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.add,
-                      color: AppColors.primary,
+                      color: Color(0xFF006C45),
                       size: 20,
                     ),
                   ),
@@ -479,7 +884,6 @@ class DashboardScreen extends StatelessWidget {
               iconBg: AppColors.primarySurface,
               iconColor: AppColors.primary,
               onTap: () {
-                // Navigate to Maps tab via MainShell
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(
@@ -538,20 +942,13 @@ class DashboardScreen extends StatelessWidget {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             scrollDirection: Axis.horizontal,
-            itemCount: 2,
+            itemCount: _newsArticles.length > 2 ? 2 : _newsArticles.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, i) {
-              final berita = dummyBeritaList[i + 4]; // last 2 items for dashboard
+              final berita = _newsArticles[i];
               return _NewsCard(
                 berita: berita,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BeritaListScreen(),
-                    ),
-                  );
-                },
+                onTap: () => _openArticle(berita),
               );
             },
           ),
@@ -664,9 +1061,17 @@ class _NewsCard extends StatelessWidget {
                 height: 90,
                 width: double.infinity,
                 color: berita.imageBgColor,
-                child: berita.imageAsset != null
-                    ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
-                    : Icon(berita.imageIcon, color: AppColors.white, size: 36),
+                child: berita.imageUrl != null && berita.imageUrl!.isNotEmpty
+                    ? Image.network(
+                        berita.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(berita.imageIcon, color: AppColors.white, size: 36);
+                        },
+                      )
+                    : berita.imageAsset != null
+                        ? Image.asset(berita.imageAsset!, fit: BoxFit.cover)
+                        : Icon(berita.imageIcon, color: AppColors.white, size: 36),
               ),
             ),
             Padding(

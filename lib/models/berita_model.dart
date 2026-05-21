@@ -17,6 +17,8 @@ class BeritaModel {
   final Color imageBgColor;
   final IconData imageIcon;
   final String? imageAsset;
+  final String? imageUrl;
+  final String? articleUrl;
 
   const BeritaModel({
     required this.id,
@@ -27,6 +29,8 @@ class BeritaModel {
     required this.imageBgColor,
     required this.imageIcon,
     this.imageAsset,
+    this.imageUrl,
+    this.articleUrl,
   });
 
   String get categoryLabel {

@@ -1,6 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../core/app_colors.dart';
+import '../models/medication_schedule.dart';
+import '../services/hive_service.dart';
+import '../services/medication_repository.dart';
 import 'add_alarm_screen.dart';
+import 'notification_history_screen.dart';
 
 class AlarmScreen extends StatefulWidget {
   const AlarmScreen({super.key});
@@ -11,24 +17,49 @@ class AlarmScreen extends StatefulWidget {
 
 class _AlarmScreenState extends State<AlarmScreen> {
   String _selectedTab = 'Obat';
+  List<MedicationSchedule> _schedules = [];
+  bool _isLoading = true;
+  StreamSubscription? _scheduleSubscription;
 
-  final List<Map<String, dynamic>> _alarms = [
-    {
-      'time': '08:00',
-      'label': 'Obat Pagi - RHZE',
-      'isActive': true,
-    },
-    {
-      'time': '13:00',
-      'label': 'Obat Siang - Vitamin',
-      'isActive': true,
-    },
-    {
-      'time': '20:00',
-      'label': 'Obat Malam',
-      'isActive': false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadSchedules();
+
+    // Set up database listener for auto-refresh
+    _scheduleSubscription = Hive.box<MedicationSchedule>('medication_schedules').watch().listen((_) {
+      _loadSchedules();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scheduleSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadSchedules() async {
+    setState(() => _isLoading = true);
+    try {
+      final schedules = await HiveService.instance.getAllSchedules();
+      setState(() {
+        _schedules = schedules;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _toggleSchedule(MedicationSchedule schedule, bool value) async {
+    await MedicationRepository.instance.toggleScheduleActive(schedule.id!, value);
+    _loadSchedules();
+  }
+
+  Future<void> _deleteSchedule(MedicationSchedule schedule) async {
+    await MedicationRepository.instance.deleteSchedule(schedule.id!, schedule.supabaseId);
+    _loadSchedules();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +86,14 @@ class _AlarmScreenState extends State<AlarmScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none_rounded, color: AppColors.primary),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -162,43 +200,179 @@ class _AlarmScreenState extends State<AlarmScreen> {
                 const SizedBox(height: 24),
                 
                 // ── Alarms List ─────────────────────────────────────
-                ..._alarms.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final alarm = entry.value;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: _AlarmCard(
-                      time: alarm['time'],
-                      label: alarm['label'],
-                      isActive: alarm['isActive'],
-                      onToggle: (val) {
-                        setState(() {
-                          _alarms[index]['isActive'] = val;
-                        });
-                      },
+                if (_isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: CircularProgressIndicator(color: Color(0xFF006C45)),
                     ),
-                  );
-                }),
+                  )
+                else if (_selectedTab == 'Obat')
+                  _schedules.where((s) => s.category == 'Obat' || s.category == null).isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              children: [
+                                Icon(Icons.alarm_off, size: 64, color: Colors.grey[400]),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Belum ada jadwal obat',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _schedules.where((s) => s.category == 'Obat' || s.category == null).length,
+                          itemBuilder: (context, index) {
+                            final obatSchedules = _schedules.where((s) => s.category == 'Obat' || s.category == null).toList();
+                            final schedule = obatSchedules[index];
+                            final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Dismissible(
+                                  key: Key('schedule_${schedule.id}'),
+                                  direction: DismissDirection.endToStart,
+                                  background: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(Icons.delete, color: Colors.white),
+                                  ),
+                                  onDismissed: (direction) {
+                                    _deleteSchedule(schedule);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Jadwal "${schedule.medicationName}" dihapus'),
+                                      ),
+                                    );
+                                  },
+                                  child: _AlarmCard(
+                                    time: timeText,
+                                    label: schedule.medicationName,
+                                    isActive: schedule.isActive,
+                                    onToggle: (val) => _toggleSchedule(schedule, val),
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                else
+                  // Air Minum Tab
+                  _schedules.where((s) => s.category == 'Air').isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              children: [
+                                Icon(Icons.water_drop, size: 64, color: Colors.blue[300]),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Belum ada jadwal minum air',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Tambahkan jadwal untuk mengingatkan Anda minum air.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textHint,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _schedules.where((s) => s.category == 'Air').length,
+                          itemBuilder: (context, index) {
+                            final waterSchedules = _schedules.where((s) => s.category == 'Air').toList();
+                            final schedule = waterSchedules[index];
+                            final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Dismissible(
+                                key: Key('schedule_${schedule.id}'),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(Icons.delete, color: Colors.white),
+                                ),
+                                onDismissed: (direction) {
+                                  _deleteSchedule(schedule);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Jadwal "${schedule.medicationName}" dihapus'),
+                                    ),
+                                  );
+                                },
+                                child: _AlarmCard(
+                                  time: timeText,
+                                  label: schedule.medicationName,
+                                  isActive: schedule.isActive,
+                                  isWater: true,
+                                  onToggle: (val) => _toggleSchedule(schedule, val),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 
-                const SizedBox(height: 80), // Space for FAB
+                const SizedBox(height: 160), // Space for FAB and Bottom NavBar
               ],
             ),
           ),
           
           // ── Floating Action Button ────────────────────────────────
           Positioned(
-            bottom: 24,
+            bottom: 16,
             right: 20,
-            child: FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddAlarmScreen()),
-                );
-              },
-              backgroundColor: const Color(0xFF006C45),
-              elevation: 4,
-              child: const Icon(Icons.add, color: AppColors.white, size: 28),
+            child: SizedBox(
+              width: 60,
+              height: 60,
+              child: FloatingActionButton(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddAlarmScreen(
+                        initialCategory: _selectedTab == 'Air Minum' ? 'Air' : 'Obat',
+                      ),
+                    ),
+                  );
+                  if (result == true) {
+                    _loadSchedules();
+                  }
+                },
+                backgroundColor: const Color(0xFF006C45),
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(Icons.add, color: AppColors.white, size: 28),
+              ),
             ),
           ),
         ],
@@ -213,12 +387,14 @@ class _AlarmCard extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onToggle,
+    this.isWater = false,
   });
 
   final String time;
   final String label;
   final bool isActive;
   final ValueChanged<bool> onToggle;
+  final bool isWater;
 
   @override
   Widget build(BuildContext context) {
@@ -242,12 +418,16 @@ class _AlarmCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isActive ? AppColors.primarySurface : const Color(0xFFE2E8F0),
+              color: isActive 
+                  ? (isWater ? const Color(0xFFE0F2FE) : AppColors.primarySurface)
+                  : const Color(0xFFE2E8F0),
               shape: BoxShape.circle,
             ),
             child: Icon(
-              Icons.medical_services_rounded,
-              color: isActive ? const Color(0xFF006C45) : const Color(0xFF94A3B8),
+              isWater ? Icons.water_drop : Icons.medical_services_rounded,
+              color: isActive 
+                  ? (isWater ? Colors.blue[600] : const Color(0xFF006C45))
+                  : const Color(0xFF94A3B8),
               size: 24,
             ),
           ),
@@ -279,7 +459,7 @@ class _AlarmCard extends StatelessWidget {
             value: isActive,
             onChanged: onToggle,
             activeThumbColor: AppColors.white,
-            activeTrackColor: const Color(0xFF006C45),
+            activeTrackColor: isWater ? Colors.blue[600] : const Color(0xFF006C45),
             inactiveThumbColor: AppColors.white,
             inactiveTrackColor: const Color(0xFFE2E8F0),
           ),

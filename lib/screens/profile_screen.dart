@@ -4,6 +4,7 @@ import 'change_phone_screen.dart';
 import 'change_email_screen.dart';
 import 'change_password_screen.dart';
 import 'health_history_screen.dart';
+import 'notification_history_screen.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -94,7 +95,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none_rounded, color: AppColors.primary),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),

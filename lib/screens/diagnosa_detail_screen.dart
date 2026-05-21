@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import 'diagnosa_screen.dart';
+import 'notification_history_screen.dart';
 
 class DiagnosaDetailScreen extends StatelessWidget {
   const DiagnosaDetailScreen({super.key});
@@ -77,8 +78,15 @@ class DiagnosaDetailScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_none, color: AppColors.primaryDark),
-            onPressed: () {},
+            icon: const Icon(Icons.notifications_none_rounded, color: AppColors.primaryDark),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
           ),
         ],
       ),
