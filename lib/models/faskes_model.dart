@@ -1,91 +1,61 @@
+/// Represents a single TBC service offered by a facility.
+class TbService {
+  final String serviceName;
+  final String description;
+
+  const TbService({required this.serviceName, required this.description});
+
+  factory TbService.fromJson(Map<String, dynamic> json) {
+    return TbService(
+      serviceName: json['service_name'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+    );
+  }
+}
+
 /// Model representing a medical facility (Faskes = Fasilitas Kesehatan).
-/// Replace [latitude] / [longitude] with real coordinates when integrating maps.
+/// Matches the Supabase `faskes` table schema.
 class FaskesModel {
-  final String id;
-  final String name;
-  final String category; // e.g., "Rumah Sakit", "Klinik", "Puskesmas"
-  final String address;
-  final String distance; // e.g., "2.4 km"
-  final String operatingHours; // e.g., "Buka 24 Jam"
-  final String emergencyContact;
-  final bool acceptsBpjs;
-  final double rating;
-  final List<String> tbFacilities; // TBC-specific facilities
+  final int id;
+  final String name;         // nama_faskes
+  final String category;     // kategori_faskes
   final double latitude;
   final double longitude;
+  final String operatingHours;   // jam_operasional
+  final String emergencyContact; // nomor_darurat
+  final List<TbService> tbServices; // layanan_tbc_tersedia (JSONB array)
+  final bool acceptsBpjs;    // terima_bpjs
 
   const FaskesModel({
     required this.id,
     required this.name,
     required this.category,
-    required this.address,
-    required this.distance,
-    required this.operatingHours,
-    required this.emergencyContact,
-    required this.acceptsBpjs,
-    required this.rating,
-    required this.tbFacilities,
     required this.latitude,
     required this.longitude,
+    required this.operatingHours,
+    required this.emergencyContact,
+    required this.tbServices,
+    required this.acceptsBpjs,
   });
-}
 
-/// Dummy data – swap with real API data when integrating backend.
-final List<FaskesModel> dummyFaskesList = [
-  const FaskesModel(
-    id: 'rs-001',
-    name: 'RSUD dr. Soetomo',
-    category: 'Rumah Sakit',
-    address: 'Jl. Mayjen Prof. dr. Moestopo No.6-8, Airlangga, Kec. Gubeng, Surabaya, Jawa Timur 60286',
-    distance: '2.4 km',
-    operatingHours: 'Buka 24 Jam',
-    emergencyContact: '(031) 5501078',
-    acceptsBpjs: true,
-    rating: 4.8,
-    tbFacilities: ['TCM (Tes Cepat Molekuler)', 'Klinik Paru', 'Ruang Isolasi Tekanan Negatif'],
-    latitude: -7.2756,
-    longitude: 112.7589,
-  ),
-  const FaskesModel(
-    id: 'pusk-001',
-    name: 'Puskesmas Gubeng',
-    category: 'Puskesmas',
-    address: 'Jl. Gubeng Jaya No.54, Gubeng, Surabaya, Jawa Timur',
-    distance: '0.8 km',
-    operatingHours: 'Senin–Jumat, 08.00–14.00',
-    emergencyContact: '(031) 5035588',
-    acceptsBpjs: true,
-    rating: 4.2,
-    tbFacilities: ['Pengambilan Dahak', 'Pemberian OAT', 'Konsultasi PMO'],
-    latitude: -7.2701,
-    longitude: 112.7508,
-  ),
-  const FaskesModel(
-    id: 'klinik-001',
-    name: 'Klinik Pratama Sehat Bersama',
-    category: 'Klinik',
-    address: 'Jl. Raya Darmo No.17, Wonokromo, Surabaya, Jawa Timur',
-    distance: '3.1 km',
-    operatingHours: 'Setiap Hari, 07.00–21.00',
-    emergencyContact: '(031) 5678901',
-    acceptsBpjs: true,
-    rating: 4.5,
-    tbFacilities: ['Tes BTA', 'Foto Rontgen', 'Konsultasi Dokter Umum'],
-    latitude: -7.2911,
-    longitude: 112.7349,
-  ),
-  const FaskesModel(
-    id: 'rs-002',
-    name: 'RS Islam A. Yani',
-    category: 'Rumah Sakit',
-    address: 'Jl. Ahmad Yani No.2-4, Wonokromo, Surabaya, Jawa Timur 60243',
-    distance: '4.0 km',
-    operatingHours: 'Buka 24 Jam',
-    emergencyContact: '(031) 8285555',
-    acceptsBpjs: true,
-    rating: 4.6,
-    tbFacilities: ['Poli Paru', 'TCM', 'Rawat Inap Isolasi'],
-    latitude: -7.3023,
-    longitude: 112.7376,
-  ),
-];
+  factory FaskesModel.fromJson(Map<String, dynamic> json) {
+    final rawServices = json['layanan_tbc_tersedia'];
+    List<TbService> services = [];
+    if (rawServices is List) {
+      services = rawServices
+          .map((e) => TbService.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return FaskesModel(
+      id: json['id'] as int? ?? 0,
+      name: json['nama_faskes'] as String? ?? '',
+      category: json['kategori_faskes'] as String? ?? 'Rumah Sakit',
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      operatingHours: json['jam_operasional'] as String? ?? '-',
+      emergencyContact: json['nomor_darurat'] as String? ?? '-',
+      tbServices: services,
+      acceptsBpjs: json['terima_bpjs'] as bool? ?? false,
+    );
+  }
+}
