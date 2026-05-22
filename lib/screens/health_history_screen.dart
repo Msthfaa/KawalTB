@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
+import '../services/hive_service.dart';
+import '../models/medication_log.dart';
+import '../models/medication_schedule.dart';
 
 class HealthHistoryScreen extends StatefulWidget {
   const HealthHistoryScreen({super.key});
@@ -9,31 +13,150 @@ class HealthHistoryScreen extends StatefulWidget {
 }
 
 class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
-  int _selectedMonthIndex = 0; // 0 for January, 11 for December
+  late int _selectedMonthIndex;
   int? _selectedDay;
+  late int _year;
+
+  List<MedicationLog> _logs = [];
+  List<MedicationSchedule> _schedules = [];
+  bool _isLoading = true;
 
   final List<String> _months = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
 
-  final int _year = 2026;
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    _selectedMonthIndex = today.month - 1; // 0-indexed
+    _selectedDay = today.day;
+    _year = today.year;
+    
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      // 1. Bersihkan log sebelum tanggal daftar pengguna
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null && user.createdAt.isNotEmpty) {
+        final createdAt = DateTime.parse(user.createdAt);
+        final startOfRegistrationDay = DateTime(createdAt.year, createdAt.month, createdAt.day);
+        await HiveService.instance.deleteLogsBeforeDate(startOfRegistrationDay);
+      }
+
+      // 2. Ambil log & jadwal
+      final logs = await HiveService.instance.getAllLogs();
+      final schedules = await HiveService.instance.getAllSchedules();
+
+      if (mounted) {
+        setState(() {
+          _logs = logs;
+          _schedules = schedules;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading health history: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   int _getDaysInMonth(int monthIndex) {
-    if (monthIndex == 1) return 28; // Feb 2026 (non-leap)
+    if (monthIndex == 1) {
+      return (_year % 4 == 0 && (_year % 100 != 0 || _year % 400 == 0)) ? 29 : 28;
+    }
     if ([3, 5, 8, 10].contains(monthIndex)) return 30;
     return 31;
   }
 
-  // Mock data functions
+  List<MedicationLog> _getLogsForDate(int day, int monthIndex) {
+    return _logs.where((log) {
+      return log.takenAt.year == _year &&
+             log.takenAt.month == monthIndex + 1 &&
+             log.takenAt.day == day;
+    }).toList();
+  }
+
   bool _isMedicineTaken(int day, int monthIndex) {
-    // arbitrary mock logic
-    return (day + monthIndex) % 3 != 0; 
+    final logsForDay = _getLogsForDate(day, monthIndex);
+    return logsForDay.any((log) {
+      final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
+        (s) => s?.medicationName == log.medicationName,
+        orElse: () => null,
+      );
+      if (schedule != null) {
+        return schedule.category == 'Obat' || schedule.category == null;
+      }
+      return log.medicationName != 'Minum Air'; // heuristic
+    });
   }
 
   bool _isWaterTaken(int day, int monthIndex) {
-    // arbitrary mock logic
-    return (day + monthIndex) % 2 == 0; 
+    final logsForDay = _getLogsForDate(day, monthIndex);
+    return logsForDay.any((log) {
+      final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
+        (s) => s?.medicationName == log.medicationName,
+        orElse: () => null,
+      );
+      if (schedule != null) {
+        return schedule.category == 'Air';
+      }
+      return log.medicationName == 'Minum Air'; // heuristic
+    });
+  }
+
+  String _calculateMedicationPercentage() {
+    if (_schedules.where((s) => s.category == 'Obat' || s.category == null).isEmpty) return '0';
+    
+    int daysPassed = 0;
+    int daysTaken = 0;
+    final today = DateTime.now();
+    
+    final daysToCalculate = (_year == today.year && _selectedMonthIndex == today.month - 1) 
+        ? today.day 
+        : (_year < today.year || (_year == today.year && _selectedMonthIndex < today.month - 1)) 
+            ? _getDaysInMonth(_selectedMonthIndex) 
+            : 0;
+
+    if (daysToCalculate == 0) return '0';
+
+    for (int i = 1; i <= daysToCalculate; i++) {
+      daysPassed++;
+      if (_isMedicineTaken(i, _selectedMonthIndex)) {
+        daysTaken++;
+      }
+    }
+    
+    return ((daysTaken / daysPassed) * 100).round().toString();
+  }
+
+  String _calculateWaterPercentage() {
+    if (_schedules.where((s) => s.category == 'Air').isEmpty) return '0';
+
+    int daysPassed = 0;
+    int daysTaken = 0;
+    final today = DateTime.now();
+    
+    final daysToCalculate = (_year == today.year && _selectedMonthIndex == today.month - 1) 
+        ? today.day 
+        : (_year < today.year || (_year == today.year && _selectedMonthIndex < today.month - 1)) 
+            ? _getDaysInMonth(_selectedMonthIndex) 
+            : 0;
+
+    if (daysToCalculate == 0) return '0';
+
+    for (int i = 1; i <= daysToCalculate; i++) {
+      daysPassed++;
+      if (_isWaterTaken(i, _selectedMonthIndex)) {
+        daysTaken++;
+      }
+    }
+    
+    return ((daysTaken / daysPassed) * 100).round().toString();
   }
 
   Widget _buildSummaryCard({
@@ -347,6 +470,27 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Riwayat Kesehatan',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          ),
+          centerTitle: false,
+          titleSpacing: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -401,14 +545,14 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
               children: [
                 _buildSummaryCard(
                   title: 'Minum Obat',
-                  percentage: '94',
+                  percentage: _calculateMedicationPercentage(),
                   icon: Icons.medical_services,
                   isPrimary: true,
                 ),
                 const SizedBox(width: 16),
                 _buildSummaryCard(
                   title: 'Minum Air',
-                  percentage: '82',
+                  percentage: _calculateWaterPercentage(),
                   icon: Icons.water_drop,
                   isPrimary: false,
                 ),

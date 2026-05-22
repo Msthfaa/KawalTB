@@ -129,4 +129,16 @@ class HiveService {
       }
     }
   }
+
+  Future<void> deleteLogsBeforeDate(DateTime date) async {
+    final box = Hive.box<MedicationLog>('medication_logs');
+    final keysToDelete = <dynamic>[];
+    for (final key in box.keys) {
+      final log = box.get(key);
+      if (log != null && log.takenAt.isBefore(date)) {
+        keysToDelete.add(key);
+      }
+    }
+    await box.deleteAll(keysToDelete);
+  }
 }

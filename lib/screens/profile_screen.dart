@@ -1,12 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
-import 'change_phone_screen.dart';
 import 'change_email_screen.dart';
 import 'change_password_screen.dart';
 import 'health_history_screen.dart';
 import 'notification_history_screen.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,8 +18,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String userName = 'Budi Santoso';
-  String userEmail = 'budi.santoso@email.com';
+  String userName = 'Memuat...';
+  String userEmail = 'Memuat...';
+  String? avatarPath;
+  bool isLoading = true;
+
+  final supabase = Supabase.instance.client;
 
   @override
   void initState() {
@@ -26,11 +32,145 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      userName = prefs.getString('user_name') ?? 'Budi Santoso';
-      userEmail = prefs.getString('user_email') ?? 'budi.santoso@email.com';
-    });
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        setState(() {
+          userEmail = user.email ?? 'Tidak ada email';
+        });
+
+        // Get name from users table
+        final response = await supabase
+            .from('users')
+            .select('nama_lengkap')
+            .eq('email', userEmail)
+            .maybeSingle();
+
+        if (response != null && response['nama_lengkap'] != null) {
+          setState(() {
+            userName = response['nama_lengkap'];
+          });
+        } else {
+          // Fallback
+          final prefs = await SharedPreferences.getInstance();
+          setState(() {
+            userName = prefs.getString('user_name') ?? 'Pengguna';
+          });
+        }
+      }
+      
+      // Load local avatar path
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        avatarPath = prefs.getString('avatar_path');
+      });
+      
+    } catch (e) {
+      debugPrint('Error loading user data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateName() async {
+    final nameController = TextEditingController(text: userName);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ubah Nama Lengkap', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: nameController,
+          decoration: InputDecoration(
+            hintText: 'Nama Lengkap',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          textCapitalization: TextCapitalization.words,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, nameController.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary, 
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty && result != userName) {
+      setState(() => isLoading = true);
+      try {
+        final user = supabase.auth.currentUser;
+        if (user != null) {
+          await supabase.from('users').update({'nama_lengkap': result}).eq('email', userEmail);
+        }
+        
+        // Update local prefs as fallback
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_name', result);
+        
+        setState(() {
+          userName = result;
+        });
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nama berhasil diperbarui'), backgroundColor: Colors.green));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memperbarui nama: $e'), backgroundColor: AppColors.error));
+      } finally {
+        if (mounted) setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _updateAvatar() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (pickedFile != null) {
+      setState(() => isLoading = true);
+      try {
+        // Save locally to bypass the need for a properly configured Supabase Storage Bucket.
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('avatar_path', pickedFile.path);
+        
+        setState(() {
+          avatarPath = pickedFile.path;
+        });
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto profil berhasil diperbarui'), backgroundColor: Colors.green));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memperbarui foto: $e'), backgroundColor: AppColors.error));
+      } finally {
+        if (mounted) setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await supabase.auth.signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Widget _buildMenuItem(
@@ -40,11 +180,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         required Widget destination,
       }) {
     return InkWell(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => destination),
         );
+        // Refresh user data when coming back (e.g. email change)
+        _loadUserData();
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
@@ -52,8 +194,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F9),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: AppColors.textPrimary, size: 20),
@@ -106,42 +248,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: isLoading 
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+        : SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Avatar
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                const CircleAvatar(
-                  radius: 50,
-                  backgroundImage: AssetImage('assets/images/profile_avatar.png'),
-                  backgroundColor: AppColors.primarySurface,
-                ),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
+            GestureDetector(
+              onTap: _updateAvatar,
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: avatarPath != null 
+                        ? FileImage(File(avatarPath!)) 
+                        : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
+                    backgroundColor: AppColors.primarySurface,
                   ),
-                  child: const Icon(
-                    Icons.edit,
-                    color: AppColors.white,
-                    size: 16,
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      color: AppColors.white,
+                      size: 14,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 16),
-            Text(
-              userName,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 32), // Balancing the edit icon
+                Text(
+                  userName,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 18, color: AppColors.primary),
+                  onPressed: _updateName,
+                  padding: const EdgeInsets.only(left: 8),
+                  constraints: const BoxConstraints(),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
@@ -151,7 +313,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 12),
             const SizedBox(height: 32),
 
             // Menu List
@@ -163,11 +324,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  _buildMenuItem(context,
-                      icon: Icons.phone_outlined,
-                      title: 'Ubah Nomor Telepon',
-                      destination: const ChangePhoneScreen()),
-                  const Divider(color: Color(0xFFF1F5F9), height: 1, indent: 64),
                   _buildMenuItem(context,
                       icon: Icons.mail_outline,
                       title: 'Ubah Email',
@@ -192,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: _logout,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFDC2626), // Red
                   side: const BorderSide(color: Color(0xFFFECACA)), // Light red border

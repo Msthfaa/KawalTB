@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/app_colors.dart';
 import 'notification_history_screen.dart';
+import 'main_shell.dart';
 
 class DiagnosaResultScreen extends StatelessWidget {
   final bool isPositive;
@@ -218,7 +220,13 @@ class DiagnosaResultScreen extends StatelessWidget {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          // TODO: Navigate to hospital finder
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MainShell(initialIndex: 3),
+                            ),
+                            (route) => false,
+                          );
                         },
                         icon: const Icon(Icons.add_box_rounded, color: AppColors.white, size: 18),
                         label: const Text(

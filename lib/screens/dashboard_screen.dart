@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   int _treatmentDay = 42;
   String _userName = 'Budi';
+  String? _avatarPath;
   List<BeritaModel> _newsArticles = dummyBeritaList;
 
   StreamSubscription? _scheduleSubscription;
@@ -63,8 +65,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final prefs = await SharedPreferences.getInstance();
       final fullName = prefs.getString('user_name') ?? 'Budi Santoso';
       final firstName = fullName.split(' ').first;
+      final avatar = prefs.getString('avatar_path');
       setState(() {
         _userName = firstName;
+        _avatarPath = avatar;
       });
     } catch (e) {
       // fallback
@@ -170,13 +174,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
+    final sheetMaxHeight = MediaQuery.of(context).size.height * 0.5;
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -200,7 +207,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 16),
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.4,
+                    maxHeight: sheetMaxHeight,
                   ),
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -370,7 +377,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundImage: const AssetImage('assets/images/profile_avatar.png'),
+            backgroundImage: _avatarPath != null 
+                ? FileImage(File(_avatarPath!)) 
+                : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
             backgroundColor: AppColors.primarySurface,
           ),
           const SizedBox(width: 10),
@@ -508,14 +517,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddAlarmScreen(initialCategory: 'Obat'),
-                    ),
-                  );
-                  _loadData();
+                onPressed: () {
+                  _showRecordMedicationSheet(context);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF004D30),
@@ -564,13 +567,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
+    final sheetMaxHeight = MediaQuery.of(context).size.height * 0.5;
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -594,7 +600,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 16),
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.4,
+                    maxHeight: sheetMaxHeight,
                   ),
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -644,7 +650,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildWaterIntakeCard(BuildContext context) {
-    const int total = 8;
+    final int total = _waterSchedules.isEmpty ? 8 : _waterSchedules.length;
     final filled = _todayLogs.where((log) {
       return log.medicationName == 'Minum Air' ||
              _waterSchedules.any((ws) => ws.medicationName == log.medicationName);
@@ -684,18 +690,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 6,
+              runSpacing: 8,
               children: List.generate(total, (i) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Container(
-                    width: 14,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: i < filled ? const Color(0xFF006C45) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                return Container(
+                  width: 14,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: i < filled ? const Color(0xFF006C45) : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 );
               }),
@@ -713,14 +718,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AddAlarmScreen(initialCategory: 'Air'),
-                      ),
-                    );
-                    _loadData();
+                  onTap: () {
+                    _showRecordWaterSheet(context);
                   },
                   child: Container(
                     width: 36,

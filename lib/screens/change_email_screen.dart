@@ -1,8 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
 
-class ChangeEmailScreen extends StatelessWidget {
+class ChangeEmailScreen extends StatefulWidget {
   const ChangeEmailScreen({super.key});
+
+  @override
+  State<ChangeEmailScreen> createState() => _ChangeEmailScreenState();
+}
+
+class _ChangeEmailScreenState extends State<ChangeEmailScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updateEmail() async {
+    final newEmail = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (newEmail.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Semua kolom harus diisi'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      final currentEmail = supabase.auth.currentUser?.email;
+      if (currentEmail == null) throw Exception('Tidak ada sesi login.');
+
+      // Re-authenticate to ensure user is verified before email change
+      await supabase.auth.signInWithPassword(email: currentEmail, password: password);
+
+      // Update email in Auth
+      await supabase.auth.updateUser(UserAttributes(email: newEmail));
+
+      // Update email in users table
+      await supabase.from('users').update({'email': newEmail}).eq('email', currentEmail);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Berhasil! Link konfirmasi dikirim ke email baru Anda.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal: $e'), backgroundColor: AppColors.error),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +89,6 @@ class ChangeEmailScreen extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // Background Gradient
           Container(
             height: 180,
             decoration: const BoxDecoration(
@@ -81,6 +142,7 @@ class ChangeEmailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       TextField(
+                        controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
                           hintText: 'contoh@email.com',
@@ -112,6 +174,7 @@ class ChangeEmailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       TextField(
+                        controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
                           hintText: 'Masukkan kata sandi saat ini',
@@ -147,7 +210,7 @@ class ChangeEmailScreen extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: _isLoading ? null : _updateEmail,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF006C45),
                             foregroundColor: AppColors.white,
@@ -157,20 +220,26 @@ class ChangeEmailScreen extends StatelessWidget {
                             ),
                             elevation: 0,
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.save_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                'Simpan Perubahan',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.save_outlined, size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Simpan Perubahan',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],

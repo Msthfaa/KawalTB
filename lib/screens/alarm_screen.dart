@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../core/app_colors.dart';
 import '../models/medication_schedule.dart';
@@ -18,6 +20,7 @@ class AlarmScreen extends StatefulWidget {
 class _AlarmScreenState extends State<AlarmScreen> {
   String _selectedTab = 'Obat';
   List<MedicationSchedule> _schedules = [];
+  String? _avatarPath;
   bool _isLoading = true;
   StreamSubscription? _scheduleSubscription;
 
@@ -42,8 +45,11 @@ class _AlarmScreenState extends State<AlarmScreen> {
     setState(() => _isLoading = true);
     try {
       final schedules = await HiveService.instance.getAllSchedules();
+      final prefs = await SharedPreferences.getInstance();
+      final avatar = prefs.getString('avatar_path');
       setState(() {
         _schedules = schedules;
+        _avatarPath = avatar;
         _isLoading = false;
       });
     } catch (e) {
@@ -71,7 +77,9 @@ class _AlarmScreenState extends State<AlarmScreen> {
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
           child: CircleAvatar(
-            backgroundImage: const AssetImage('assets/images/profile_avatar.png'),
+            backgroundImage: _avatarPath != null 
+                ? FileImage(File(_avatarPath!)) 
+                : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
             backgroundColor: AppColors.primarySurface,
           ),
         ),
@@ -97,11 +105,33 @@ class _AlarmScreenState extends State<AlarmScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0),
+        child: FloatingActionButton(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AddAlarmScreen(
+                initialCategory: _selectedTab == 'Air Minum' ? 'Air' : 'Obat',
+              ),
+            ),
+          );
+          if (result == true) {
+            _loadSchedules();
+          }
+        },
+        backgroundColor: const Color(0xFF006C45),
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Icon(Icons.add, color: AppColors.white, size: 28),
+      ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
@@ -340,43 +370,10 @@ class _AlarmScreenState extends State<AlarmScreen> {
                           },
                         ),
                 
-                const SizedBox(height: 160), // Space for FAB and Bottom NavBar
+                const SizedBox(height: 80), // Space for FAB
               ],
             ),
           ),
-          
-          // ── Floating Action Button ────────────────────────────────
-          Positioned(
-            bottom: 16,
-            right: 20,
-            child: SizedBox(
-              width: 60,
-              height: 60,
-              child: FloatingActionButton(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AddAlarmScreen(
-                        initialCategory: _selectedTab == 'Air Minum' ? 'Air' : 'Obat',
-                      ),
-                    ),
-                  );
-                  if (result == true) {
-                    _loadSchedules();
-                  }
-                },
-                backgroundColor: const Color(0xFF006C45),
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(Icons.add, color: AppColors.white, size: 28),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
