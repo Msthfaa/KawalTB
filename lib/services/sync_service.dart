@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:workmanager/workmanager.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'hive_service.dart';
@@ -68,33 +70,48 @@ class SyncService {
   SyncService._();
 
   Future<void> initialize() async {
-    await Workmanager().initialize(
-      callbackDispatcher,
-      isInDebugMode: false,
-    );
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) return;
+    try {
+      await Workmanager().initialize(
+        callbackDispatcher,
+        isInDebugMode: false,
+      );
+    } catch (e) {
+      print('Error initializing Workmanager: $e');
+    }
   }
 
   // Schedule a periodic background task to run every 15 minutes (minimum interval)
   Future<void> registerPeriodicSync() async {
-    await Workmanager().registerPeriodicTask(
-      "periodic-sync-id",
-      syncTaskName,
-      frequency: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
-    );
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) return;
+    try {
+      await Workmanager().registerPeriodicTask(
+        "periodic-sync-id",
+        syncTaskName,
+        frequency: const Duration(minutes: 15),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+      );
+    } catch (e) {
+      print('Error registering periodic sync task: $e');
+    }
   }
 
   // Trigger a one-off sync task to run immediately
   Future<void> triggerImmediateSync() async {
-    await Workmanager().registerOneOffTask(
-      "oneoff-sync-${DateTime.now().millisecondsSinceEpoch}",
-      syncTaskName,
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
-    );
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) return;
+    try {
+      await Workmanager().registerOneOffTask(
+        "oneoff-sync-${DateTime.now().millisecondsSinceEpoch}",
+        syncTaskName,
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+      );
+    } catch (e) {
+      print('Error triggering immediate sync task: $e');
+    }
   }
 }

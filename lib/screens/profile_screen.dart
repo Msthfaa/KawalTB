@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -249,7 +250,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: isLoading 
-        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+        ? const SizedBox.expand(
+            child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+          )
         : SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Column(
@@ -264,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   CircleAvatar(
                     radius: 50,
                     backgroundImage: avatarPath != null 
-                        ? FileImage(File(avatarPath!)) 
+                        ? (kIsWeb ? NetworkImage(avatarPath!) as ImageProvider : FileImage(File(avatarPath!))) 
                         : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
                     backgroundColor: AppColors.primarySurface,
                   ),

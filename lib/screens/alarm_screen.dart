@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../core/app_colors.dart';
@@ -11,14 +12,15 @@ import 'add_alarm_screen.dart';
 import 'notification_history_screen.dart';
 
 class AlarmScreen extends StatefulWidget {
-  const AlarmScreen({super.key});
+  final String? initialTab;
+  const AlarmScreen({super.key, this.initialTab});
 
   @override
   State<AlarmScreen> createState() => _AlarmScreenState();
 }
 
 class _AlarmScreenState extends State<AlarmScreen> {
-  String _selectedTab = 'Obat';
+  late String _selectedTab;
   List<MedicationSchedule> _schedules = [];
   String? _avatarPath;
   bool _isLoading = true;
@@ -27,6 +29,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedTab = widget.initialTab ?? 'Obat';
     _loadSchedules();
 
     // Set up database listener for auto-refresh
@@ -78,7 +81,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
           padding: const EdgeInsets.all(8.0),
           child: CircleAvatar(
             backgroundImage: _avatarPath != null 
-                ? FileImage(File(_avatarPath!)) 
+                ? (kIsWeb ? NetworkImage(_avatarPath!) as ImageProvider : FileImage(File(_avatarPath!))) 
                 : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
             backgroundColor: AppColors.primarySurface,
           ),
@@ -129,115 +132,114 @@ class _AlarmScreenState extends State<AlarmScreen> {
         child: const Icon(Icons.add, color: AppColors.white, size: 28),
       ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Pengingat Saya',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF006C45), // Dark green text
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Atur jadwal minum obat dan aktivitas harian\nAnda.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // ── Segmented Control ───────────────────────────────
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _selectedTab = 'Obat'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedTab == 'Obat' ? AppColors.white : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: _selectedTab == 'Obat'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                'Obat',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: _selectedTab == 'Obat' ? FontWeight.w700 : FontWeight.w600,
-                                  color: _selectedTab == 'Obat' ? const Color(0xFF006C45) : AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _selectedTab = 'Air Minum'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedTab == 'Air Minum' ? AppColors.white : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: _selectedTab == 'Air Minum'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                'Air Minum',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: _selectedTab == 'Air Minum' ? FontWeight.w700 : FontWeight.w600,
-                                  color: _selectedTab == 'Air Minum' ? const Color(0xFF006C45) : AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // ── Alarms List ─────────────────────────────────────
-                if (_isLoading)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(40.0),
-                      child: CircularProgressIndicator(color: Color(0xFF006C45)),
+      body: _isLoading
+          ? const SizedBox.expand(
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF006C45)),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Pengingat Saya',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF006C45), // Dark green text
                     ),
-                  )
-                else if (_selectedTab == 'Obat')
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Atur jadwal minum obat dan aktivitas harian\nAnda.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // ── Segmented Control ───────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTab = 'Obat'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedTab == 'Obat' ? AppColors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: _selectedTab == 'Obat'
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.05),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Obat',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: _selectedTab == 'Obat' ? FontWeight.w700 : FontWeight.w600,
+                                    color: _selectedTab == 'Obat' ? const Color(0xFF006C45) : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTab = 'Air Minum'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedTab == 'Air Minum' ? AppColors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: _selectedTab == 'Air Minum'
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.05),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Air Minum',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: _selectedTab == 'Air Minum' ? FontWeight.w700 : FontWeight.w600,
+                                    color: _selectedTab == 'Air Minum' ? const Color(0xFF006C45) : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // ── Alarms List ─────────────────────────────────────
+                  if (_selectedTab == 'Obat')
                   _schedules.where((s) => s.category == 'Obat' || s.category == null).isEmpty
                       ? Center(
                           child: Padding(

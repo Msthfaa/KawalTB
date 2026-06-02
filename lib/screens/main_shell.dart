@@ -11,10 +11,9 @@ import 'profile_screen.dart';
 /// The main shell that hosts all tab screens and the bottom navigation bar.
 /// After a successful login, navigate here instead of [DashboardScreen].
 class MainShell extends StatefulWidget {
-  const MainShell({super.key, this.initialIndex = 0});
-
-  /// Which tab to open first (e.g. pass 3 to land directly on Maps).
   final int initialIndex;
+  final String? initialAlarmTab;
+  const MainShell({super.key, this.initialIndex = 0, this.initialAlarmTab});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -29,25 +28,20 @@ class _MainShellState extends State<MainShell> {
     _currentIndex = widget.initialIndex;
   }
 
-  // ── Tab screens ─────────────────────────────────────────────────────────────
-  // Keep all screens alive with IndexedStack so state is preserved across tabs.
-  static const List<Widget> _screens = [
-    DashboardScreen(),          // 0 – Beranda
-    DiagnosaDetailScreen(),     // 1 – Diagnosa
-    AlarmScreen(),              // 2 - Alarm
-    FaskesMapScreen(),          // 3 – Maps
-    ProfileScreen(),            // 4 - Profil
-  ];
-
-
   @override
   Widget build(BuildContext context) {
+    final List<Widget> screens = [
+      const DashboardScreen(),          // 0 – Beranda
+      const DiagnosaDetailScreen(),     // 1 – Diagnosa
+      AlarmScreen(initialTab: widget.initialAlarmTab), // 2 - Alarm (with initial tab dynamic argument)
+      const FaskesMapScreen(),          // 3 – Maps
+      const ProfileScreen(),            // 4 - Profil
+    ];
+
     return Scaffold(
-      // Use extendBody so the map / content can bleed under the navbar
-      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
       bottomNavigationBar: KawalBottomNavBar(
         currentIndex: _currentIndex,

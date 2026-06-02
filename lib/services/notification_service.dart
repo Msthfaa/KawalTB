@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_10y.dart' as tz;
@@ -41,54 +43,60 @@ class NotificationService {
       // Fallback in case of error
     }
 
-    // 2. Initialize Android notification settings
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux)) return;
 
-    // 3. Initialize iOS notification settings
-    const DarwinInitializationSettings initializationSettingsDarwin =
-        DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    try {
+      // 2. Initialize Android notification settings
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
+      // 3. Initialize iOS notification settings
+      const DarwinInitializationSettings initializationSettingsDarwin =
+          DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
-    await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Handle notification tap action here in the foreground
-        NotificationService.handleNotificationAction(response);
-      },
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-    );
+      const InitializationSettings initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid,
+        iOS: initializationSettingsDarwin,
+      );
 
-    // Check if the app was launched via a notification action click (cold start)
-    final NotificationAppLaunchDetails? launchDetails =
-        await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
-    if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
-      final NotificationResponse? response = launchDetails.notificationResponse;
-      if (response != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+      await flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          // Handle notification tap action here in the foreground
           NotificationService.handleNotificationAction(response);
-        });
-      }
-    }
+        },
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      );
 
-    // Request permissions for Android 13+
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-        
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestExactAlarmsPermission();
+      // Check if the app was launched via a notification action click (cold start)
+      final NotificationAppLaunchDetails? launchDetails =
+          await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+      if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+        final NotificationResponse? response = launchDetails.notificationResponse;
+        if (response != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            NotificationService.handleNotificationAction(response);
+          });
+        }
+      }
+
+      // Request permissions for Android 13+
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+          
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestExactAlarmsPermission();
+    } catch (e) {
+      print('Error initializing Local Notifications: $e');
+    }
   }
 
   Future<void> scheduleDailyMedication({
@@ -101,89 +109,94 @@ class NotificationService {
     required String medicationName,
     String? supabaseScheduleId,
   }) async {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
-
-    // If scheduled time is in the past, move it to tomorrow
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-
-    final List<AndroidNotificationAction> androidActions = [];
-    if (category == 'Air') {
-      androidActions.add(
-        const AndroidNotificationAction(
-          'action_sudah_air',
-          'Sudah Minum',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux)) return;
+    try {
+      final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+      tz.TZDateTime scheduledDate = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
       );
-    } else {
-      androidActions.addAll([
-        const AndroidNotificationAction(
-          'action_sudah_obat',
-          'Sudah Minum',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
-        const AndroidNotificationAction(
-          'action_tunda_obat',
-          'Tunda (15 Menit)',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
-      ]);
+
+      // If scheduled time is in the past, move it to tomorrow
+      if (scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 1));
+      }
+
+      final List<AndroidNotificationAction> androidActions = [];
+      if (category == 'Air') {
+        androidActions.add(
+          const AndroidNotificationAction(
+            'action_sudah_air',
+            'Sudah Minum',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+        );
+      } else {
+        androidActions.addAll([
+          const AndroidNotificationAction(
+            'action_sudah_obat',
+            'Sudah Minum',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+          const AndroidNotificationAction(
+            'action_tunda_obat',
+            'Tunda (15 Menit)',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+        ]);
+      }
+
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'medication_reminder_channel',
+        'Medication Reminders',
+        channelDescription: 'Channel for daily medication reminders',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        actions: androidActions,
+      );
+
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        presentBadge: true,
+      );
+
+      final NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final String payload = jsonEncode({
+        'id': id,
+        'category': category,
+        'medicationName': medicationName,
+        'supabaseScheduleId': supabaseScheduleId,
+      });
+
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id,
+        title,
+        body,
+        scheduledDate,
+        platformChannelSpecifics,
+        payload: payload,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (e) {
+      print('Error scheduling daily medication: $e');
     }
-
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'medication_reminder_channel',
-      'Medication Reminders',
-      channelDescription: 'Channel for daily medication reminders',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      actions: androidActions,
-    );
-
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentSound: true,
-      presentBadge: true,
-    );
-
-    final NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    final String payload = jsonEncode({
-      'id': id,
-      'category': category,
-      'medicationName': medicationName,
-      'supabaseScheduleId': supabaseScheduleId,
-    });
-
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      scheduledDate,
-      platformChannelSpecifics,
-      payload: payload,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
   }
 
   Future<void> scheduleOneOffNotification({
@@ -195,75 +208,80 @@ class NotificationService {
     required String medicationName,
     String? supabaseScheduleId,
   }) async {
-    final tz.TZDateTime tzScheduledDate = tz.TZDateTime.from(scheduledDate, tz.local);
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux)) return;
+    try {
+      final tz.TZDateTime tzScheduledDate = tz.TZDateTime.from(scheduledDate, tz.local);
 
-    final List<AndroidNotificationAction> androidActions = [];
-    if (category == 'Air') {
-      androidActions.add(
-        const AndroidNotificationAction(
-          'action_sudah_air',
-          'Sudah Minum',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
+      final List<AndroidNotificationAction> androidActions = [];
+      if (category == 'Air') {
+        androidActions.add(
+          const AndroidNotificationAction(
+            'action_sudah_air',
+            'Sudah Minum',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+        );
+      } else {
+        androidActions.addAll([
+          const AndroidNotificationAction(
+            'action_sudah_obat',
+            'Sudah Minum',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+          const AndroidNotificationAction(
+            'action_tunda_obat',
+            'Tunda (15 Menit)',
+            cancelNotification: true,
+            showsUserInterface: true,
+          ),
+        ]);
+      }
+
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'medication_reminder_channel',
+        'Medication Reminders',
+        channelDescription: 'Channel for daily medication reminders',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        actions: androidActions,
       );
-    } else {
-      androidActions.addAll([
-        const AndroidNotificationAction(
-          'action_sudah_obat',
-          'Sudah Minum',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
-        const AndroidNotificationAction(
-          'action_tunda_obat',
-          'Tunda (15 Menit)',
-          cancelNotification: true,
-          showsUserInterface: true,
-        ),
-      ]);
+
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        presentBadge: true,
+      );
+
+      final NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final String payload = jsonEncode({
+        'id': id,
+        'category': category,
+        'medicationName': medicationName,
+        'supabaseScheduleId': supabaseScheduleId,
+      });
+
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tzScheduledDate,
+        platformChannelSpecifics,
+        payload: payload,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e) {
+      print('Error scheduling one off notification: $e');
     }
-
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'medication_reminder_channel',
-      'Medication Reminders',
-      channelDescription: 'Channel for daily medication reminders',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      actions: androidActions,
-    );
-
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentSound: true,
-      presentBadge: true,
-    );
-
-    final NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    final String payload = jsonEncode({
-      'id': id,
-      'category': category,
-      'medicationName': medicationName,
-      'supabaseScheduleId': supabaseScheduleId,
-    });
-
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tzScheduledDate,
-      platformChannelSpecifics,
-      payload: payload,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
   }
 
   static Future<void> handleNotificationAction(NotificationResponse response) async {
@@ -308,11 +326,21 @@ class NotificationService {
   }
 
   Future<void> cancelSchedule(int id) async {
-    await flutterLocalNotificationsPlugin.cancel(id);
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux)) return;
+    try {
+      await flutterLocalNotificationsPlugin.cancel(id);
+    } catch (e) {
+      print('Error cancelling notification schedule: $e');
+    }
   }
 
   Future<void> cancelAllSchedules() async {
-    await flutterLocalNotificationsPlugin.cancelAll();
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isLinux)) return;
+    try {
+      await flutterLocalNotificationsPlugin.cancelAll();
+    } catch (e) {
+      print('Error cancelling all notification schedules: $e');
+    }
   }
 }
 

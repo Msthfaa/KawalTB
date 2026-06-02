@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_colors.dart';
@@ -16,7 +17,6 @@ import 'berita_list_screen.dart';
 import 'diagnosa_detail_screen.dart';
 import 'main_shell.dart';
 import 'notification_history_screen.dart';
-import 'add_alarm_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -66,34 +66,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final fullName = prefs.getString('user_name') ?? 'Budi Santoso';
       final firstName = fullName.split(' ').first;
       final avatar = prefs.getString('avatar_path');
-      setState(() {
-        _userName = firstName;
-        _avatarPath = avatar;
-      });
+      if (mounted) {
+        setState(() {
+          _userName = firstName;
+          _avatarPath = avatar;
+        });
+      }
     } catch (e) {
       // fallback
     }
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    Future.microtask(() {
+      if (mounted) setState(() => _isLoading = true);
+    });
     try {
       final schedules = await HiveService.instance.getAllSchedules();
       final logs = await HiveService.instance.getTodayLogs();
-      final allLogs = await HiveService.instance.getAllLogs();
       
-      int day = 42;
+      int day = DateTime.now().day;
       final medSchedules = schedules.where((s) => s.isActive && (s.category == 'Obat' || s.category == null)).toList();
-      if (allLogs.isNotEmpty && medSchedules.isNotEmpty) {
-        final medNames = medSchedules.map((s) => s.medicationName).toSet();
-        final medLogs = allLogs.where((l) => medNames.contains(l.medicationName)).toList();
-        if (medLogs.isNotEmpty) {
-          medLogs.sort((a, b) => a.takenAt.compareTo(b.takenAt));
-          final firstLogDate = DateTime(medLogs.first.takenAt.year, medLogs.first.takenAt.month, medLogs.first.takenAt.day);
-          final todayDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-          day = todayDate.difference(firstLogDate).inDays + 1;
-        }
-      }
 
       // Load news dynamically to sync with BeritaListScreen
       List<BeritaModel> mappedNews = dummyBeritaList;
@@ -130,17 +123,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // use fallback dummyBeritaList
       }
 
-      setState(() {
-        _medicationSchedules = medSchedules;
-        _waterSchedules = schedules.where((s) => s.isActive && s.category == 'Air').toList();
-        _todayLogs = logs;
-        _treatmentDay = day;
-        _newsArticles = mappedNews;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _medicationSchedules = medSchedules;
+          _waterSchedules = schedules.where((s) => s.category == 'Air').toList();
+          _todayLogs = logs;
+          _treatmentDay = day;
+          _newsArticles = mappedNews;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  Future<void> _handleRefresh() async {
+    try {
+      await MedicationRepository.instance.syncSchedulesFromSupabase();
+    } catch (_) {}
+    await _loadData();
   }
 
   void _openArticle(BeritaModel berita) {
@@ -156,103 +160,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           imageUrl: berita.imageUrl,
         ),
       ),
-    );
-  }
-
-  void _showRecordMedicationSheet(BuildContext context) {
-    final untaken = _medicationSchedules.where((s) {
-      return !_todayLogs.any((l) => l.medicationName == s.medicationName);
-    }).toList();
-
-    if (untaken.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Semua obat hari ini sudah Anda minum!'),
-          backgroundColor: Color(0xFF006C45),
-        ),
-      );
-      return;
-    }
-
-    final sheetMaxHeight = MediaQuery.of(context).size.height * 0.5;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Catat Minum Obat',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF006C45),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Pilih obat yang sudah Anda minum baru saja untuk dicatat.',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: sheetMaxHeight,
-                  ),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: untaken.length,
-                    itemBuilder: (context, index) {
-                      final schedule = untaken[index];
-                      final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
-                      return ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: AppColors.primarySurface,
-                          child: Icon(Icons.medication, color: Color(0xFF006C45)),
-                        ),
-                        title: Text(schedule.medicationName),
-                        subtitle: Text('Jadwal: $timeText WIB'),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
-                            await MedicationRepository.instance.recordMedicationTaken(schedule);
-                            await _loadData();
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Berhasil mencatat "${schedule.medicationName}"'),
-                                backgroundColor: const Color(0xFF006C45),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006C45),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text('Minum'),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -284,80 +191,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
       nextScheduleText = 'Belum ada jadwal obat aktif.';
     }
 
+    final showLoading = _isLoading && _medicationSchedules.isEmpty && _waterSchedules.isEmpty;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        color: const Color(0xFF006C45),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Header ────────────────────────────────────────────────
-              _buildHeader(context),
-              const SizedBox(height: 20),
+      body: showLoading
+          ? const SizedBox.expand(
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF006C45)),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: const Color(0xFF006C45),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Header ────────────────────────────────────────────────
+                    _buildHeader(context),
+                    const SizedBox(height: 20),
 
-              if (_isLoading && _medicationSchedules.isEmpty && _waterSchedules.isEmpty)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 80.0),
-                    child: CircularProgressIndicator(color: Color(0xFF006C45)),
-                  ),
-                )
-              else ...[
-                // ── Greeting ──────────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Halo, $_userName!',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0F172A),
-                        ),
+                    // ── Greeting ──────────────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Halo, $_userName!',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Tetap semangat, Anda berada di jalur yang tepat menuju kesembuhan.',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Color(0xFF475569),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tetap semangat, Anda berada di jalur yang tepat menuju kesembuhan.',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Color(0xFF475569),
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Medication Card ───────────────────────────────────────
+                    _buildMedicationCard(context, takenDoses, totalDoses, progress, nextScheduleText),
+                    const SizedBox(height: 16),
+
+                    // ── Water Intake ──────────────────────────────────────────
+                    _buildWaterIntakeCard(context),
+                    const SizedBox(height: 24),
+
+                    // ── Health Check CTA ──────────────────────────────────────
+                    _buildHealthCheckCard(context),
+                    const SizedBox(height: 20),
+
+                    // ── Quick Access Cards ────────────────────────────────────
+                    _buildQuickAccessCards(context),
+                    const SizedBox(height: 24),
+
+                    // ── News Section ──────────────────────────────────────────
+                    _buildNewsSection(context),
+                    const SizedBox(height: 100),
+                  ],
                 ),
-                const SizedBox(height: 20),
-
-                // ── Medication Card ───────────────────────────────────────
-                _buildMedicationCard(context, takenDoses, totalDoses, progress, nextScheduleText),
-                const SizedBox(height: 16),
-
-                // ── Water Intake ──────────────────────────────────────────
-                _buildWaterIntakeCard(context),
-                const SizedBox(height: 24),
-
-                // ── Health Check CTA ──────────────────────────────────────
-                _buildHealthCheckCard(context),
-                const SizedBox(height: 20),
-
-                // ── Quick Access Cards ────────────────────────────────────
-                _buildQuickAccessCards(context),
-                const SizedBox(height: 24),
-
-                // ── News Section ──────────────────────────────────────────
-                _buildNewsSection(context),
-                const SizedBox(height: 100),
-              ],
-            ],
-          ),
-        ),
-      ),
+              ),
+            ),
     );
   }
 
@@ -378,7 +284,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           CircleAvatar(
             radius: 20,
             backgroundImage: _avatarPath != null 
-                ? FileImage(File(_avatarPath!)) 
+                ? (kIsWeb ? NetworkImage(_avatarPath!) as ImageProvider : FileImage(File(_avatarPath!))) 
                 : const AssetImage('assets/images/profile_avatar.png') as ImageProvider,
             backgroundColor: AppColors.primarySurface,
           ),
@@ -514,37 +420,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  _showRecordMedicationSheet(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF004D30),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Catat',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+            Builder(
+              builder: (btnContext) {
+                // Cari obat pertama yang belum diminum hari ini
+                final untaken = _medicationSchedules.where((s) {
+                  return !_todayLogs.any((l) => l.medicationName == s.medicationName);
+                }).toList();
+                untaken.sort((a, b) {
+                  final cmp = a.hour.compareTo(b.hour);
+                  if (cmp != 0) return cmp;
+                  return a.minute.compareTo(b.minute);
+                });
+
+                final bool allTaken = _medicationSchedules.isNotEmpty && untaken.isEmpty;
+                final String buttonLabel = _medicationSchedules.isEmpty
+                    ? 'Tambah Pengingat'
+                    : allTaken
+                        ? 'Semua Sudah Diminum ✓'
+                        : 'Catat "${untaken.first.medicationName}"';
+
+                return SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: allTaken
+                        ? null // Disable jika semua sudah diminum
+                        : () async {
+                            if (_medicationSchedules.isEmpty) {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const MainShell(
+                                    initialIndex: 2,
+                                    initialAlarmTab: 'Obat',
+                                  ),
+                                ),
+                                (route) => false,
+                              );
+                              return;
+                            }
+
+                            // Langsung catat obat pertama yang belum diminum
+                            final schedule = untaken.first;
+                            final messenger = ScaffoldMessenger.of(btnContext);
+                            await MedicationRepository.instance.recordMedicationTaken(schedule);
+                            await _loadData();
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Berhasil mencatat "${schedule.medicationName}" ✓'),
+                                backgroundColor: const Color(0xFF006C45),
+                              ),
+                            );
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: allTaken ? const Color(0xFF94A3B8) : const Color(0xFF004D30),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      elevation: 0,
+                      disabledBackgroundColor: const Color(0xFFE2E8F0),
+                      disabledForegroundColor: const Color(0xFF94A3B8),
                     ),
-                  ],
-                ),
-              ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _medicationSchedules.isEmpty
+                              ? Icons.add_alarm_rounded
+                              : allTaken
+                                  ? Icons.check_circle_rounded
+                                  : Icons.check_circle_outline,
+                          color: allTaken ? const Color(0xFF94A3B8) : Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            buttonLabel,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: allTaken ? const Color(0xFF94A3B8) : Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -552,105 +518,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showRecordWaterSheet(BuildContext context) {
-    final untaken = _waterSchedules.where((s) {
-      return !_todayLogs.any((l) => l.medicationName == s.medicationName);
-    }).toList();
 
-    if (untaken.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Semua jadwal minum air hari ini sudah terpenuhi!'),
-          backgroundColor: Color(0xFF006C45),
-        ),
-      );
-      return;
-    }
-
-    final sheetMaxHeight = MediaQuery.of(context).size.height * 0.5;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Catat Minum Air',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF006C45),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Pilih jadwal minum air yang sudah Anda lakukan.',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: sheetMaxHeight,
-                  ),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: untaken.length,
-                    itemBuilder: (context, index) {
-                      final schedule = untaken[index];
-                      final timeText = '${schedule.hour.toString().padLeft(2, '0')}:${schedule.minute.toString().padLeft(2, '0')}';
-                      return ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFE8F5EE),
-                          child: Icon(Icons.water_drop, color: Color(0xFF006C45)),
-                        ),
-                        title: Text(schedule.medicationName),
-                        subtitle: Text('Jadwal: $timeText WIB'),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
-                            await MedicationRepository.instance.recordMedicationTaken(schedule);
-                            await _loadData();
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Berhasil mencatat "${schedule.medicationName}"'),
-                                backgroundColor: const Color(0xFF006C45),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006C45),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text('Minum'),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildWaterIntakeCard(BuildContext context) {
-    final int total = _waterSchedules.isEmpty ? 8 : _waterSchedules.length;
+    const int total = 8;
     final filled = _todayLogs.where((log) {
       return log.medicationName == 'Minum Air' ||
              _waterSchedules.any((ws) => ws.medicationName == log.medicationName);
@@ -719,7 +590,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 GestureDetector(
                   onTap: () {
-                    _showRecordWaterSheet(context);
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MainShell(
+                          initialIndex: 2,
+                          initialAlarmTab: 'Air Minum',
+                        ),
+                      ),
+                      (route) => false,
+                    );
                   },
                   child: Container(
                     width: 36,
