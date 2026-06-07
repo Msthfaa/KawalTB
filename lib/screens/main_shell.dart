@@ -32,10 +32,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final List<Widget> screens = [
       const DashboardScreen(),          // 0 – Beranda
-      const DiagnosaDetailScreen(),     // 1 – Diagnosa
-      AlarmScreen(initialTab: widget.initialAlarmTab), // 2 - Alarm (with initial tab dynamic argument)
-      const FaskesMapScreen(),          // 3 – Maps
-      const ProfileScreen(),            // 4 - Profil
+      AlarmScreen(initialTab: widget.initialAlarmTab), // 1 - Alarm
+      const FaskesMapScreen(),          // 2 – Maps
+      const ProfileScreen(),            // 3 - Profil
     ];
 
     return Scaffold(

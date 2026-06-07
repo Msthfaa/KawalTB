@@ -82,8 +82,11 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
   }
 
   bool _isMedicineTaken(int day, int monthIndex) {
+    final medSchedules = _schedules.where((s) => s.category == 'Obat' || s.category == null).toList();
+    if (medSchedules.isEmpty) return false;
+
     final logsForDay = _getLogsForDate(day, monthIndex);
-    return logsForDay.any((log) {
+    int validLogs = logsForDay.where((log) {
       final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
         (s) => s?.medicationName == log.medicationName,
         orElse: () => null,
@@ -92,12 +95,17 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
         return schedule.category == 'Obat' || schedule.category == null;
       }
       return log.medicationName != 'Minum Air'; // heuristic
-    });
+    }).length;
+
+    return validLogs >= medSchedules.length;
   }
 
   bool _isWaterTaken(int day, int monthIndex) {
+    final waterSchedules = _schedules.where((s) => s.category == 'Air').toList();
+    if (waterSchedules.isEmpty) return false;
+
     final logsForDay = _getLogsForDate(day, monthIndex);
-    return logsForDay.any((log) {
+    int validLogs = logsForDay.where((log) {
       final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
         (s) => s?.medicationName == log.medicationName,
         orElse: () => null,
@@ -106,14 +114,17 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
         return schedule.category == 'Air';
       }
       return log.medicationName == 'Minum Air'; // heuristic
-    });
+    }).length;
+
+    return validLogs >= waterSchedules.length;
   }
 
   String _calculateMedicationPercentage() {
-    if (_schedules.where((s) => s.category == 'Obat' || s.category == null).isEmpty) return '0';
+    final medSchedules = _schedules.where((s) => s.category == 'Obat' || s.category == null).toList();
+    if (medSchedules.isEmpty) return '0';
     
-    int daysPassed = 0;
-    int daysTaken = 0;
+    int expectedDoses = 0;
+    int actualDoses = 0;
     final today = DateTime.now();
     
     final daysToCalculate = (_year == today.year && _selectedMonthIndex == today.month - 1) 
@@ -125,20 +136,36 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
     if (daysToCalculate == 0) return '0';
 
     for (int i = 1; i <= daysToCalculate; i++) {
-      daysPassed++;
-      if (_isMedicineTaken(i, _selectedMonthIndex)) {
-        daysTaken++;
+      expectedDoses += medSchedules.length;
+      
+      final logsForDay = _getLogsForDate(i, _selectedMonthIndex);
+      int validLogs = logsForDay.where((log) {
+        final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
+          (s) => s?.medicationName == log.medicationName,
+          orElse: () => null,
+        );
+        if (schedule != null) {
+          return schedule.category == 'Obat' || schedule.category == null;
+        }
+        return log.medicationName != 'Minum Air';
+      }).length;
+
+      if (validLogs > medSchedules.length) {
+        validLogs = medSchedules.length;
       }
+      
+      actualDoses += validLogs;
     }
     
-    return ((daysTaken / daysPassed) * 100).round().toString();
+    return ((actualDoses / expectedDoses) * 100).round().toString();
   }
 
   String _calculateWaterPercentage() {
-    if (_schedules.where((s) => s.category == 'Air').isEmpty) return '0';
+    final waterSchedules = _schedules.where((s) => s.category == 'Air').toList();
+    if (waterSchedules.isEmpty) return '0';
 
-    int daysPassed = 0;
-    int daysTaken = 0;
+    int expectedDoses = 0;
+    int actualDoses = 0;
     final today = DateTime.now();
     
     final daysToCalculate = (_year == today.year && _selectedMonthIndex == today.month - 1) 
@@ -150,13 +177,28 @@ class _HealthHistoryScreenState extends State<HealthHistoryScreen> {
     if (daysToCalculate == 0) return '0';
 
     for (int i = 1; i <= daysToCalculate; i++) {
-      daysPassed++;
-      if (_isWaterTaken(i, _selectedMonthIndex)) {
-        daysTaken++;
+      expectedDoses += waterSchedules.length;
+      
+      final logsForDay = _getLogsForDate(i, _selectedMonthIndex);
+      int validLogs = logsForDay.where((log) {
+        final schedule = _schedules.cast<MedicationSchedule?>().firstWhere(
+          (s) => s?.medicationName == log.medicationName,
+          orElse: () => null,
+        );
+        if (schedule != null) {
+          return schedule.category == 'Air';
+        }
+        return log.medicationName == 'Minum Air';
+      }).length;
+
+      if (validLogs > waterSchedules.length) {
+        validLogs = waterSchedules.length;
       }
+      
+      actualDoses += validLogs;
     }
     
-    return ((daysTaken / daysPassed) * 100).round().toString();
+    return ((actualDoses / expectedDoses) * 100).round().toString();
   }
 
   Widget _buildSummaryCard({

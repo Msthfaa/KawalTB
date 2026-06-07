@@ -521,11 +521,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
   Widget _buildWaterIntakeCard(BuildContext context) {
-    const int total = 8;
+    if (_waterSchedules.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadow,
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.water_drop, color: Color(0xFF94A3B8), size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Minum Air',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.water_drop_outlined, size: 40, color: Color(0xFF94A3B8)),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum Ada Jadwal',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Atur jadwal pengingat agar kebutuhan air harian Anda selalu terpenuhi.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MainShell(
+                                initialIndex: 2,
+                                initialAlarmTab: 'Air Minum',
+                              ),
+                            ),
+                            (route) => false,
+                          );
+                        },
+                        icon: const Icon(Icons.add_alarm_rounded, size: 18),
+                        label: const Text('Atur Jadwal Minum'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE8F5EE),
+                          foregroundColor: const Color(0xFF006C45),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final int total = _waterSchedules.length;
     final filled = _todayLogs.where((log) {
       return log.medicationName == 'Minum Air' ||
              _waterSchedules.any((ws) => ws.medicationName == log.medicationName);
     }).length;
+
+    // Cap filled to total so we don't draw more filled bars than total bars
+    final displayFilled = filled > total ? total : filled;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -570,7 +675,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   width: 14,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: i < filled ? const Color(0xFF006C45) : const Color(0xFFE2E8F0),
+                    color: i < displayFilled ? const Color(0xFF006C45) : const Color(0xFFE2E8F0),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 );
@@ -581,7 +686,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '$filled/$total Gelas',
+                  '$displayFilled/$total Gelas',
                   style: const TextStyle(
                     fontSize: 14,
                     color: Color(0xFF64748B),

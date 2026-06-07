@@ -61,28 +61,64 @@ class NewsService {
   List<Article> _getFallbackArticles() {
     return [
       Article(
-        title: "Mengenal Gejala TBC dan Cara Pencegahannya",
-        description: "Tuberkulosis (TBC) adalah penyakit menular yang disebabkan bakteri Mycobacterium tuberculosis. Gejala utamanya meliputi batuk berdahak selama lebih dari 2 minggu, demam, keringat malam, dan penurunan berat badan secara drastis tanpa alasan jelas. Pelajari cara pencegahannya dengan vaksinasi BCG dan menjaga ventilasi rumah.",
-        url: "https://tbindonesia.or.id/informasi/tentang-tbc/",
-        image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=600",
+        title: "Tuberkulosis (TBC) - Penyebab, Gejala, Pengobatan & Pencegahan",
+        description: "Butuh info Tuberkulosis (TBC) untukmu atau keluarga? Baca Gejala, Penyebab, Pencegahan & Pengobatan. Pakai Halodoc kapan & dari mana saja.",
+        url: "https://www.halodoc.com/kesehatan/tuberkulosis",
+        image: "https://d1vbn70lmn1nqe.cloudfront.net/prod/wp-content/uploads/2021/06/20060124/tuberkulosis-halodoc.jpg",
       ),
       Article(
-        title: "Pentingnya Kepatuhan Minum Obat TBC Hingga Tuntas",
-        description: "Pengobatan TBC membutuhkan kepatuhan luar biasa karena pasien harus minum obat setiap hari selama minimal 6 bulan. Menghentikan konsumsi obat secara sepihak sebelum waktu yang ditentukan sangat berbahaya karena dapat memicu resistensi bakteri (MDR-TB) yang jauh lebih sulit dan lama untuk disembuhkan.",
-        url: "https://tbindonesia.or.id/informasi/tentang-tbc/pengobatan-tbc/",
+        title: "TBC (Tuberkulosis) - Gejala, penyebab dan mengobati - Alodokter",
+        description: "Tuberkulosis (TBC) atau TB adalah penyakit menular akibat infeksi bakteri. TBC umumnya menyerang paru-paru, tetapi juga dapat menyerang organ tubuh lain, seperti ginjal, tulang belakang, dan otak.",
+        url: "https://www.alodokter.com/tuberkulosis",
+        image: "https://res.cloudinary.com/dk0z4ums3/image/upload/v1589445100/attached_image/tuberkulosis.jpg",
+      ),
+      Article(
+        title: "Tuberkulosis - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Tuberkulosis, sering disingkat TB atau TBC, adalah penyakit menular yang umumnya memengaruhi paru-paru. Penyakit ini disebabkan oleh infeksi bakteri Mycobacterium tuberculosis.",
+        url: "https://id.wikipedia.org/wiki/Tuberkulosis",
+        image: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Tuberculosis-x-ray-1.jpg/1200px-Tuberculosis-x-ray-1.jpg",
+      ),
+      Article(
+        title: "Mycobacterium tuberculosis - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Mycobacterium tuberculosis adalah spesies bakteri patogen serta agen penyebab utama tuberkulosis. Bakteri ini pertama kali ditemukan pada 1882 oleh Robert Koch.",
+        url: "https://id.wikipedia.org/wiki/Mycobacterium_tuberculosis",
+        image: "https://upload.wikimedia.org/wikipedia/commons/0/0a/TB_Culture.jpg",
+      ),
+      Article(
+        title: "Vaksin Bacillus Calmette-Guérin - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Vaksin Bacillus Calmette-Guérin (BCG) adalah vaksin yang utamanya digunakan untuk mencegah tuberkulosis (TB). Satu dosis vaksin dianjurkan pada bayi sehat secepatnya setelah lahir.",
+        url: "https://id.wikipedia.org/wiki/Vaksin_BCG",
+        image: "https://upload.wikimedia.org/wikipedia/commons/2/25/Mycobacterium_bovis_BCG_ZN.jpg",
+      ),
+      Article(
+        title: "Tuberkulosis resistan obat ganda - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Tuberkulosis resistan obat ganda (MDR-TB) adalah bentuk tuberkulosis (TB) yang disebabkan oleh bakteri yang tidak merespons terhadap pengobatan dengan setidaknya isoniazid dan rifampisin.",
+        url: "https://id.wikipedia.org/wiki/Tuberkulosis_resistan_obat_ganda",
         image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?q=80&w=600",
       ),
       Article(
-        title: "Gaya Hidup Sehat & Nutrisi Tepat untuk Penderita TBC",
-        description: "Selain kepatuhan minum obat, proses penyembuhan TBC paru didukung oleh asupan nutrisi yang kaya akan protein dan vitamin, istirahat yang cukup, serta menjaga sirkulasi udara bersih di dalam ruangan agar tetap segar dan tidak lembap.",
-        url: "https://tbindonesia.or.id/artikel/nutrisi-penting-bagi-pasien-tbc/",
-        image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=600",
+        title: "Tes Mantoux - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Tes Mantoux atau uji tuberkulin adalah alat diagnostik untuk tuberkulosis. Tes ini digunakan untuk mengetahui apakah seseorang telah terinfeksi bakteri Mycobacterium tuberculosis.",
+        url: "https://id.wikipedia.org/wiki/Tes_Mantoux",
+        image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=600",
       ),
       Article(
-        title: "Mitos vs Fakta Seputar Penularan Tuberkulosis",
-        description: "Banyak mitos menyebutkan bahwa TBC menular lewat alat makan bersama atau penyakit keturunan. Fakta medis membuktikan bahwa TBC menular hanya melalui udara saat penderita batuk atau bersin. Mari cegah stigma negatif dengan edukasi yang benar.",
-        url: "https://tbindonesia.or.id/informasi/tentang-tbc/cara-penularan/",
+        title: "Paru-paru - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Paru-paru adalah organ utama pada sistem pernapasan pada manusia dan hewan lainnya. Infeksi seperti tuberkulosis utamanya menyerang organ paru-paru ini.",
+        url: "https://id.wikipedia.org/wiki/Paru-paru",
+        image: "https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?q=80&w=600",
+      ),
+      Article(
+        title: "Hari Tuberkulosis Sedunia - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Hari Tuberkulosis Sedunia diperingati pada tanggal 24 Maret setiap tahun untuk membangun kesadaran masyarakat tentang epidemi tuberkulosis global.",
+        url: "https://id.wikipedia.org/wiki/Hari_Tuberkulosis_Sedunia",
         image: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600",
+      ),
+      Article(
+        title: "Batuk - Wikipedia bahasa Indonesia, ensiklopedia bebas",
+        description: "Batuk adalah refleks yang terjadi ketika saluran udara tersumbat atau teriritasi. Batuk berdahak selama lebih dari 2 minggu adalah gejala utama penyakit tuberkulosis.",
+        url: "https://id.wikipedia.org/wiki/Batuk",
+        image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=600",
       ),
     ];
   }

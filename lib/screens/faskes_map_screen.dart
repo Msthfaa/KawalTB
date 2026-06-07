@@ -509,7 +509,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           // Result Count Indicator (Bottom Left)
           if (!_loading && _error == null && _filtered.isNotEmpty && _selected == null)
             Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 100,
+              bottom: MediaQuery.of(context).padding.bottom + 30,
               left: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -561,8 +561,8 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           Positioned(
             right: 16,
             bottom: _selected != null 
-                ? (MediaQuery.of(context).padding.bottom + 290) 
-                : (MediaQuery.of(context).padding.bottom + 100),
+                ? (MediaQuery.of(context).padding.bottom + 220) 
+                : (MediaQuery.of(context).padding.bottom + 30),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -605,7 +605,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           // Selected Faskes Floating Card
           if (_selected != null)
             Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 100,
+              bottom: MediaQuery.of(context).padding.bottom + 30,
               left: 12,
               right: 12,
               child: SlideTransition(

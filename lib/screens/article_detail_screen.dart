@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/app_colors.dart';
-import 'article_webview_screen.dart';
 
 class ArticleDetailScreen extends StatelessWidget {
   final String url;
@@ -41,16 +41,20 @@ class ArticleDetailScreen extends StatelessWidget {
     return rawContent.replaceAll(RegExp(r'\[\d+ chars\]$'), '').trim();
   }
 
-  void _openFullArticle(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ArticleWebViewScreen(
-          url: url,
-          title: title,
-        ),
-      ),
-    );
+  Future<void> _openFullArticle(BuildContext context) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka artikel')),
+        );
+      }
+    }
   }
 
   @override

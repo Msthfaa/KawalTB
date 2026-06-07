@@ -27,7 +27,8 @@ class _DiagnosaScreenState extends State<DiagnosaScreen> {
       return;
     }
 
-    bool isPositive = (q1 == 'B' || q1 == 'C' || q2 == 'B' || q3 == 'B' || q4 == 'B' || q5 == 'B');
+    bool adaGejalaTambahan = (q3 == 'B' || q4 == 'B' || q5 == 'B');
+    bool isPositive = (q1 == 'C') || (q2 == 'B') || (q1 == 'B' && adaGejalaTambahan);
 
     Navigator.pushReplacement(
       context,
