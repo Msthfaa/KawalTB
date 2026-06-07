@@ -450,7 +450,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => const MainShell(
-                                    initialIndex: 2,
+                                    initialIndex: 1,
                                     initialAlarmTab: 'Obat',
                                   ),
                                 ),
@@ -594,7 +594,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const MainShell(
-                                initialIndex: 2,
+                                initialIndex: 1,
                                 initialAlarmTab: 'Air Minum',
                               ),
                             ),
@@ -699,7 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => const MainShell(
-                          initialIndex: 2,
+                          initialIndex: 1,
                           initialAlarmTab: 'Air Minum',
                         ),
                       ),

@@ -109,7 +109,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
         ],
       ),
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
+        padding: const EdgeInsets.only(bottom: 100.0),
         child: FloatingActionButton(
         onPressed: () async {
           final result = await Navigator.push(
