@@ -509,7 +509,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           // Result Count Indicator (Bottom Left)
           if (!_loading && _error == null && _filtered.isNotEmpty && _selected == null)
             Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 40,
+              bottom: MediaQuery.of(context).padding.bottom + 100,
               left: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -560,7 +560,9 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           // Map Control FABs
           Positioned(
             right: 16,
-            bottom: _selected != null ? 320 : (MediaQuery.of(context).padding.bottom + 95), // Move up if card is shown or above navbar
+            bottom: _selected != null 
+                ? (MediaQuery.of(context).padding.bottom + 290) 
+                : (MediaQuery.of(context).padding.bottom + 100),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -603,7 +605,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
           // Selected Faskes Floating Card
           if (_selected != null)
             Positioned(
-              bottom: 24,
+              bottom: MediaQuery.of(context).padding.bottom + 100,
               left: 12,
               right: 12,
               child: SlideTransition(
@@ -814,7 +816,7 @@ class _PremiumFaskesCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,15 +826,15 @@ class _PremiumFaskesCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: _catColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.local_hospital_rounded, color: _catColor, size: 26),
+                    child: Icon(Icons.local_hospital_rounded, color: _catColor, size: 24),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -840,19 +842,19 @@ class _PremiumFaskesCard extends StatelessWidget {
                         Text(
                           faskes.name,
                           style: const TextStyle(
-                            fontSize: 17,
+                            fontSize: 15,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
                             height: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
                             Text(
                               faskes.category,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: _catColor,
                               ),
@@ -896,7 +898,7 @@ class _PremiumFaskesCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               
               // Key Info Row
               Row(
@@ -921,7 +923,7 @@ class _PremiumFaskesCard extends StatelessWidget {
               ),
               
               if (faskes.tbServices.isNotEmpty) ...[
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 const Text(
                   'Layanan TBC',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
@@ -949,7 +951,7 @@ class _PremiumFaskesCard extends StatelessWidget {
                   }).toList(),
                 ),
               ],
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Action Buttons
               Row(
@@ -963,7 +965,7 @@ class _PremiumFaskesCard extends StatelessWidget {
                         foregroundColor: AppColors.primary,
                         side: BorderSide(color: AppColors.primary.withOpacity(0.3), width: 1.5),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         elevation: 0,
                       ),
                     ),
@@ -978,7 +980,7 @@ class _PremiumFaskesCard extends StatelessWidget {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         elevation: 0,
                       ),
                     ),
