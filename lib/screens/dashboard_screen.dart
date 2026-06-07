@@ -891,7 +891,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const MainShell(initialIndex: 3),
+                    builder: (_) => const MainShell(initialIndex: 2),
                   ),
                   (route) => false,
                 );
