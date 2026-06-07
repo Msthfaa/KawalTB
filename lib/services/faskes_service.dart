@@ -32,4 +32,20 @@ class FaskesService {
         .map((e) => FaskesModel.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  /// Returns faskes within the specified map bounds.
+  Future<List<FaskesModel>> fetchInBounds(double minLat, double maxLat, double minLng, double maxLng) async {
+    final response = await _client
+        .from('faskes')
+        .select()
+        .gte('latitude', minLat)
+        .lte('latitude', maxLat)
+        .gte('longitude', minLng)
+        .lte('longitude', maxLng)
+        .order('nama_faskes', ascending: true);
+
+    return (response as List<dynamic>)
+        .map((e) => FaskesModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }

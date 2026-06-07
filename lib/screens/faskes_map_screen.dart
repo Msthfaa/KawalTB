@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -27,17 +28,22 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
   List<Marker> _markers = [];
   FaskesModel? _selected;
   LatLng? _myLocation;
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
-  int _filterIndex = 0;
   final _searchCtrl = TextEditingController();
+  bool _showSearchAreaButton = false;
+  bool _isSatellite = false; 
+  
+  // Filters
+  static const _filters = ['Semua', 'Rumah Sakit', 'Klinik', 'Puskesmas'];
+  int _filterIndex = 0;
+
+  StreamSubscription<Position>? _positionStream;
 
   // ── Animation Controllers ───────────────────────────────────────────────────
   late AnimationController _cardCtrl;
   late Animation<Offset> _cardSlide;
   late Animation<double> _cardFade;
-
-  static const _filters = ['Semua', 'Rumah Sakit', 'Klinik', 'Puskesmas'];
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
   @override
@@ -47,19 +53,27 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _cardSlide = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOutBack),
+    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
+      CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOutCubic),
     );
     _cardFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOut),
     );
     
-    _fetchFaskes();
-    _initMyLocation();
+    _startLocationStream();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+           _searchInArea();
+        }
+      });
+    });
   }
 
   @override
   void dispose() {
+    _positionStream?.cancel();
     _cardCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -81,7 +95,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
     );
 
     final controller = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
 
@@ -107,43 +121,80 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
     controller.forward();
   }
 
-  // ── User Location Initialization ─────────────────────────────────────────────
-  Future<void> _initMyLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-      LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-        if (perm == LocationPermission.denied) return;
-      }
-      if (perm == LocationPermission.deniedForever) return;
-      final pos = await Geolocator.getCurrentPosition();
+  // ── User Location Stream ───────────────────────────────────────────────────
+  Future<void> _startLocationStream() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+    LocationPermission perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.denied) return;
+    }
+    if (perm == LocationPermission.deniedForever) return;
+
+    final initialPos = await Geolocator.getCurrentPosition();
+    if (mounted) {
+      setState(() {
+        _myLocation = LatLng(initialPos.latitude, initialPos.longitude);
+      });
+      _buildMarkers();
+    }
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
+    ).listen((Position position) {
       if (mounted) {
         setState(() {
-          _myLocation = LatLng(pos.latitude, pos.longitude);
+          _myLocation = LatLng(position.latitude, position.longitude);
         });
         _buildMarkers();
       }
-    } catch (_) {}
+    });
   }
 
   // ── Fetch Data ──────────────────────────────────────────────────────────────
-  Future<void> _fetchFaskes() async {
+  Future<void> _searchInArea() async {
+    if (!mounted) return;
     setState(() {
+      _showSearchAreaButton = false;
       _loading = true;
       _error = null;
     });
+
     try {
-      final data = await FaskesService.instance.fetchAll();
+      final bounds = _mapController.camera.visibleBounds;
+      final minLat = bounds.southWest.latitude;
+      final maxLat = bounds.northEast.latitude;
+      final minLng = bounds.southWest.longitude;
+      final maxLng = bounds.northEast.longitude;
+
+      final data = await FaskesService.instance.fetchInBounds(minLat, maxLat, minLng, maxLng);
+      
+      if (!mounted) return;
       setState(() {
         _allFaskes = data;
         _loading = false;
       });
       _applyFilter();
+      
+      if (data.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Tidak ada faskes di area ini.', style: TextStyle(color: Colors.white)),
+            backgroundColor: Colors.black87,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Gagal memuat data: ${e.toString()}';
         _loading = false;
       });
     }
@@ -153,8 +204,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
     final q = _searchCtrl.text.toLowerCase();
     setState(() {
       _filtered = _allFaskes.where((f) {
-        final matchCat =
-            _filterIndex == 0 || f.category == _filters[_filterIndex];
+        final matchCat = _filterIndex == 0 || f.category == _filters[_filterIndex];
         final matchQ = q.isEmpty || f.name.toLowerCase().contains(q);
         return matchCat && matchQ;
       }).toList();
@@ -162,117 +212,100 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
     _buildMarkers();
   }
 
-  // ── Marker Builder (Funky Custom Pin Design) ──────────────────────────────────
+
+  // ── Marker Builder ──────────────────────────────────
   void _buildMarkers() {
     final markers = <Marker>[];
 
-    // 1. Faskes Markers
     for (final f in _filtered) {
       final isSelected = _selected?.id == f.id;
       final category = f.category;
 
       Color pinColor;
-      String emoji;
+      IconData iconData;
       if (category == 'Rumah Sakit') {
-        pinColor = AppColors.primary;
-        emoji = '🏥';
+        pinColor = const Color(0xFFE53935);
       } else if (category == 'Klinik') {
-        pinColor = const Color(0xFF7C3AED); // Funky Violet
-        emoji = '🩺';
+        pinColor = const Color(0xFF1E88E5);
       } else {
-        pinColor = const Color(0xFF0EA5E9); // Funky Cyan
-        emoji = '🏠';
+        pinColor = const Color(0xFF43A047);
       }
+      
+      // Select icons that look more premium
+      iconData = Icons.local_hospital_rounded;
 
       markers.add(Marker(
         point: LatLng(f.latitude, f.longitude),
-        width: isSelected ? 70.0 : 54.0,
-        height: isSelected ? 70.0 : 54.0,
+        width: isSelected ? 65.0 : 45.0,
+        height: isSelected ? 65.0 : 45.0,
         child: GestureDetector(
           onTap: () => _selectFaskes(f),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Bottom pointer arrow
-              Positioned(
-                bottom: 0,
-                child: Icon(
-                  Icons.arrow_drop_down_rounded,
-                  color: pinColor,
-                  size: isSelected ? 26 : 20,
-                ),
-              ),
-              // Main Circular Pin Body
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: pinColor.withOpacity(isSelected ? 0.45 : 0.2),
-                      blurRadius: isSelected ? 12 : 6,
-                      spreadRadius: isSelected ? 4 : 0,
-                      offset: const Offset(0, 3),
-                    )
-                  ],
-                  border: Border.all(
-                    color: pinColor,
-                    width: isSelected ? 3.5 : 2.0,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(6.0),
-                  child: Center(
-                    child: AnimatedScale(
-                      scale: isSelected ? 1.2 : 1.0,
-                      duration: const Duration(milliseconds: 300),
-                      child: Text(
-                        emoji,
-                        style: TextStyle(
-                          fontSize: isSelected ? 24 : 18,
-                        ),
-                      ),
+          child: AnimatedScale(
+            scale: isSelected ? 1.15 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(isSelected ? 6 : 5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? pinColor : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: pinColor.withOpacity(0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
+                    border: Border.all(
+                      color: isSelected ? Colors.white : pinColor,
+                      width: 2.5,
                     ),
                   ),
+                  child: Icon(
+                    iconData,
+                    color: isSelected ? Colors.white : pinColor,
+                    size: isSelected ? 24 : 16,
+                  ),
                 ),
-              ),
-            ],
+                if (isSelected)
+                  Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: pinColor,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+              ],
+            ),
           ),
         ),
       ));
     }
 
-    // 2. User Pulse Marker
+    // User Location Marker
     if (_myLocation != null) {
       markers.add(Marker(
         point: _myLocation!,
-        width: 30,
-        height: 30,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Glowing outer ring (representing GPS accuracy/pulse)
-            _PulseCircle(),
-            // Clean white base
-            Container(
-              width: 14,
-              height: 14,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
-            // Vibrant blue core dot
-            Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                color: Color(0xFF3B82F6),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ],
+        width: 24,
+        height: 24,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E88E5),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1E88E5).withOpacity(0.5),
+                blurRadius: 12,
+                spreadRadius: 2,
+              )
+            ],
+          ),
         ),
       ));
     }
@@ -281,43 +314,45 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
   }
 
   void _selectFaskes(FaskesModel f) {
-    setState(() => _selected = f);
-    _buildMarkers(); // Redraw with highlighted marker
+    setState(() {
+      _selected = f;
+      _showSearchAreaButton = false; // Hide search button when card is open
+    });
+    _buildMarkers(); 
     _cardCtrl.forward(from: 0);
-    _animatedMapMove(LatLng(f.latitude, f.longitude), 15);
+    // Center slightly below the marker so the card doesn't cover it
+    _animatedMapMove(LatLng(f.latitude - 0.005, f.longitude), 14.5);
   }
 
   void _dismissCard() {
     _cardCtrl.reverse().then((_) {
       if (mounted) {
-        setState(() => _selected = null);
-        _buildMarkers(); // Restore regular markers
+        setState(() {
+          _selected = null;
+        });
+        _buildMarkers(); 
       }
     });
   }
 
   Future<void> _goToMyLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
-    LocationPermission perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) {
-      perm = await Geolocator.requestPermission();
-      if (perm == LocationPermission.denied) return;
+    if (_myLocation != null) {
+      _animatedMapMove(_myLocation!, 14.5);
     }
-    if (perm == LocationPermission.deniedForever) return;
-    final pos = await Geolocator.getCurrentPosition();
-    final newLoc = LatLng(pos.latitude, pos.longitude);
-    setState(() {
-      _myLocation = newLoc;
-    });
-    _buildMarkers();
-    _animatedMapMove(newLoc, 14.5);
   }
 
   Future<void> _launchDirections(FaskesModel f) async {
-    final uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=${f.latitude},${f.longitude}');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    final intentUri = Uri.parse('google.navigation:q=${f.latitude},${f.longitude}&mode=d');
+    final webUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${f.latitude},${f.longitude}');
+    
+    try {
+      final launched = await launchUrl(intentUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _launchPhone(String number) async {
@@ -333,7 +368,7 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // 1. OpenStreetMap rendering using CartoDB Voyager tiles
+          // 1. Map Layer
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -342,11 +377,17 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
               ),
+              onPositionChanged: (pos, hasGesture) {
+                if (hasGesture && !_showSearchAreaButton && _selected == null) {
+                  setState(() => _showSearchAreaButton = true);
+                }
+              },
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                urlTemplate: _isSatellite 
+                  ? 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+                  : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
                 userAgentPackageName: 'com.example.kawaltb',
               ),
@@ -356,40 +397,58 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
             ],
           ),
 
-          // 2. Beautiful gradient overlay for top controls
+          // 2a. Smooth Gradient Blur Background (Behind Header)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: 230,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
+            height: MediaQuery.of(context).padding.top + 160,
+            child: IgnorePointer(
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withOpacity(0.85),
-                    Colors.white.withOpacity(0.0),
-                  ],
+                  colors: [Colors.black, Colors.black, Colors.transparent],
+                  stops: [0.0, 0.75, 1.0],
+                ).createShader(bounds),
+                blendMode: BlendMode.dstIn,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0.85),
+                            Colors.white.withOpacity(0.4),
+                            Colors.white.withOpacity(0.0),
+                          ],
+                          stops: const [0.0, 0.6, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
 
-          // 3. Funky header control panel (Search + Filters)
+          // 2b. Premium Header Panel Content
           Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
+            top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             right: 16,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SearchBar(
+                _PremiumSearchBar(
                   controller: _searchCtrl,
                   onChanged: (_) => _applyFilter(),
                 ),
                 const SizedBox(height: 12),
-                _FilterChips(
+                _PremiumFilterChips(
                   filters: _filters,
                   selectedIndex: _filterIndex,
                   onSelected: (i) {
@@ -401,66 +460,163 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
             ),
           ),
 
-          // 4. Loading / Error Overlay
-          if (_loading)
-            const Center(
-              child: Card(
-                elevation: 6,
-                shape: CircleBorder(),
-                child: Padding(
-                  padding: EdgeInsets.all(12.0),
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary,
-                    strokeWidth: 3.5,
+          // 3. Compact "Cari di area ini" Button
+          if (_showSearchAreaButton && _selected == null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 150, // Just below glass header
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _searchInArea,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.saved_search, size: 18, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Cari di area ini',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          if (_error != null)
-            Center(child: _ErrorCard(error: _error!, onRetry: _fetchFaskes)),
 
-          // 5. Playful Counter Badge
-          if (!_loading && _error == null)
+          // Result Count Indicator (Bottom Left)
+          if (!_loading && _error == null && _filtered.isNotEmpty && _selected == null)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 124,
+              bottom: MediaQuery.of(context).padding.bottom + 40,
               left: 16,
-              child: _CountBadge(count: _filtered.length),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4))
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_rounded, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${_filtered.length} Faskes',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
 
-          // 6. Funky Locate-me FAB
+          // Loading overlay
+          if (_loading)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+                ),
+                child: const CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 3,
+                ),
+              ),
+            ),
+
+          if (_error != null)
+            Center(child: _ErrorCard(error: _error!, onRetry: _searchInArea)),
+
+          // Map Control FABs
           Positioned(
             right: 16,
-            bottom: _selected != null ? 350 : 110,
-            child: _LocateMeButton(onTap: _goToMyLocation),
+            bottom: _selected != null ? 320 : (MediaQuery.of(context).padding.bottom + 95), // Move up if card is shown or above navbar
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'mapStyle',
+                  onPressed: () {
+                    setState(() {
+                      _isSatellite = !_isSatellite;
+                    });
+                  },
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Icon(_isSatellite ? Icons.map_rounded : Icons.satellite_alt_rounded, size: 20),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton(
+                  heroTag: 'locateMe',
+                  onPressed: _goToMyLocation,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: const Icon(Icons.my_location_rounded),
+                ),
+              ],
+            ),
           ),
 
-          // 7. Funky Glassmorphism Bento Card
+          // Tap-away overlay
+          if (_selected != null)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _dismissCard,
+                behavior: HitTestBehavior.translucent,
+              ),
+            ),
+
+          // Selected Faskes Floating Card
           if (_selected != null)
             Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+              bottom: 24,
+              left: 12,
+              right: 12,
               child: SlideTransition(
                 position: _cardSlide,
                 child: FadeTransition(
                   opacity: _cardFade,
-                  child: _FaskesBentoCard(
+                  child: _PremiumFaskesCard(
                     faskes: _selected!,
                     onDismiss: _dismissCard,
                     onPhone: () => _launchPhone(_selected!.emergencyContact),
                     onDirections: () => _launchDirections(_selected!),
                   ),
                 ),
-              ),
-            ),
-
-          // 8. Tap-away overlay to dismiss bento card
-          if (_selected != null)
-            Positioned.fill(
-              bottom: 320,
-              child: GestureDetector(
-                onTap: _dismissCard,
-                behavior: HitTestBehavior.translucent,
               ),
             ),
         ],
@@ -470,78 +626,25 @@ class _FaskesMapScreenState extends State<FaskesMapScreen>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pulsing GPS Location Indicator
+// Premium Components
 // ─────────────────────────────────────────────────────────────────────────────
-class _PulseCircle extends StatefulWidget {
-  @override
-  State<_PulseCircle> createState() => _PulseCircleState();
-}
-
-class _PulseCircleState extends State<_PulseCircle>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-    _animation = Tween<double>(begin: 8, end: 26).animate(_controller);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          width: _animation.value,
-          height: _animation.value,
-          decoration: BoxDecoration(
-            color: const Color(0xFF3B82F6).withOpacity(
-              ((26 - _animation.value) / 18).clamp(0.0, 0.4),
-            ),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Playful glassmorphic Search Bar
-// ─────────────────────────────────────────────────────────────────────────────
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.controller, required this.onChanged});
+class _PremiumSearchBar extends StatelessWidget {
+  const _PremiumSearchBar({required this.controller, required this.onChanged});
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 54,
+      height: 52,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.12),
-          width: 1.5,
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           )
         ],
       ),
@@ -551,48 +654,25 @@ class _SearchBar extends StatelessWidget {
         style: const TextStyle(
           fontSize: 14,
           color: AppColors.textPrimary,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
-          hintText: 'Cari Rumah Sakit, Klinik, Puskesmas... 🔍',
-          hintStyle: const TextStyle(
-            color: AppColors.textHint,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            color: AppColors.primary,
-            size: 22,
+          hintText: 'Cari fasilitas kesehatan...',
+          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+          prefixIcon: const Padding(
+            padding: EdgeInsets.only(left: 8),
+            child: Icon(Icons.search_rounded, color: AppColors.primary),
           ),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: AppColors.textSecondary,
-                    size: 18,
-                  ),
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary, size: 20),
                   onPressed: () {
                     controller.clear();
                     onChanged('');
                   },
                 )
-              : Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.08),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.tune_rounded,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                ),
+              : null,
           border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
@@ -600,11 +680,8 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colorful Filter Chips
-// ─────────────────────────────────────────────────────────────────────────────
-class _FilterChips extends StatelessWidget {
-  const _FilterChips({
+class _PremiumFilterChips extends StatelessWidget {
+  const _PremiumFilterChips({
     required this.filters,
     required this.selectedIndex,
     required this.onSelected,
@@ -613,57 +690,36 @@ class _FilterChips extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
-  static const _chipColors = [
-    AppColors.primary,
-    AppColors.primary,
-    Color(0xFF7C3AED), // Violet
-    Color(0xFF0EA5E9), // Cyan
-  ];
-
-  static const _emojis = ['✨ Semua', '🏥 RS', '🩺 Klinik', '🏠 Puskesmas'];
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 38,
+      height: 40,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         itemCount: filters.length,
-        separatorBuilder: (context, gap) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final sel = i == selectedIndex;
-          final color = _chipColors[i < _chipColors.length ? i : 0];
+        separatorBuilder: (context, i) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final isSelected = i == selectedIndex;
           return GestureDetector(
             onTap: () => onSelected(i),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: sel ? color : Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: sel ? color : AppColors.border,
-                  width: sel ? 2 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: sel
-                        ? color.withOpacity(0.25)
-                        : Colors.black.withOpacity(0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  )
-                ],
+                color: isSelected ? AppColors.primary : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected 
+                    ? [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] 
+                    : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
               ),
-              child: Center(
-                child: Text(
-                  _emojis[i],
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: sel ? Colors.white : AppColors.textSecondary,
-                  ),
+              child: Text(
+                filters[i],
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
             ),
@@ -674,105 +730,6 @@ class _FilterChips extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Playful Count Badge
-// ─────────────────────────────────────────────────────────────────────────────
-class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.count});
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          )
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.explore_rounded, color: Colors.white, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            '$count Faskes TB Terdekat 📍',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Funky Location FAB
-// ─────────────────────────────────────────────────────────────────────────────
-class _LocateMeButton extends StatelessWidget {
-  const _LocateMeButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [Colors.white, Color(0xFFF8FAFC)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          )
-        ],
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.18),
-          width: 1.5,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.my_location_rounded,
-              color: AppColors.primary,
-              size: 24,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Error Card
-// ─────────────────────────────────────────────────────────────────────────────
 class _ErrorCard extends StatelessWidget {
   const _ErrorCard({required this.error, required this.onRetry});
   final String error;
@@ -780,76 +737,43 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 24,
-              )
-            ],
-            border: Border.all(color: AppColors.error.withOpacity(0.2), width: 1.5),
+    return Container(
+      margin: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 16)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            error,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            textAlign: TextAlign.center,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.wifi_off_rounded,
-                color: AppColors.error,
-                size: 54,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Gagal memuat data 😥',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                error,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 3,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Coba Lagi'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: onRetry,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Coba Lagi'),
+          )
+        ],
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Funky Glassmorphism Bento Card
-// ─────────────────────────────────────────────────────────────────────────────
-class _FaskesBentoCard extends StatelessWidget {
-  const _FaskesBentoCard({
+class _PremiumFaskesCard extends StatelessWidget {
+  const _PremiumFaskesCard({
     required this.faskes,
     required this.onDismiss,
     required this.onPhone,
@@ -863,11 +787,11 @@ class _FaskesBentoCard extends StatelessWidget {
   Color get _catColor {
     switch (faskes.category) {
       case 'Klinik':
-        return const Color(0xFF7C3AED); // Violet
+        return const Color(0xFF1E88E5);
       case 'Puskesmas':
-        return const Color(0xFF0EA5E9); // Cyan
+        return const Color(0xFF43A047);
       default:
-        return AppColors.primary; // Green
+        return const Color(0xFFE53935);
     }
   }
 
@@ -876,369 +800,228 @@ class _FaskesBentoCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.12),
             blurRadius: 32,
-            offset: const Offset(0, -8),
+            spreadRadius: 4,
+            offset: const Offset(0, 12),
           )
         ],
-        border: Border(
-          top: BorderSide(
-            color: _catColor.withOpacity(0.35),
-            width: 4.5,
-          ),
-        ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle lookalike
-          Center(
-            child: Container(
-              width: 48,
-              height: 5,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Header Row
-          Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      _catColor,
-                      _catColor.withOpacity(0.75),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _catColor.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
-                ),
-                child: const Icon(
-                  Icons.local_hospital_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      faskes.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _Badge(label: faskes.category, color: _catColor),
-                        if (faskes.acceptsBpjs) ...[
-                          const SizedBox(width: 6),
-                          const _BpjsBadge(),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Mini service tag
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _catColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _catColor.withOpacity(0.15),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  '${faskes.tbServices.length} Layanan',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: _catColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-
-          // Operating Hours & Emergency Contact Grid
-          Row(
-            children: [
-              Expanded(
-                child: _InfoTile(
-                  icon: Icons.access_time_rounded,
-                  label: 'Jam Operasional',
-                  value: faskes.operatingHours,
-                  color: AppColors.primary,
-                  bg: AppColors.primarySurface,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _InfoTile(
-                  icon: Icons.phone_rounded,
-                  label: 'Kontak Darurat',
-                  value: faskes.emergencyContact,
-                  color: const Color(0xFF0EA5E9),
-                  bg: const Color(0xFFEFF9FF),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // TBC Services List
-          if (faskes.tbServices.isNotEmpty) ...[
-            const Text(
-              'Layanan TBC Tersedia 💉',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 72,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: faskes.tbServices.length,
-                separatorBuilder: (context, gap) => const SizedBox(width: 8),
-                itemBuilder: (_, i) {
-                  final svc = faskes.tbServices[i];
-                  return Container(
-                    width: 200,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+              // Header with Close Button
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: _catColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppColors.border,
-                        width: 1.5,
-                      ),
                     ),
+                    child: Icon(Icons.local_hospital_rounded, color: _catColor, size: 26),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          svc.serviceName,
+                          faskes.name,
                           style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
+                            height: 1.2,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          svc.description,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Text(
+                              faskes.category,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: _catColor,
+                              ),
+                            ),
+                            if (faskes.acceptsBpjs) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.green.shade200),
+                                ),
+                                child: const Text(
+                                  'BPJS',
+                                  style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(width: 8),
+                  // Close Button
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onDismiss,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 24),
+              
+              // Key Info Row
+              Row(
+                children: [
+                  Expanded(
+                    child: _InfoTile(
+                      icon: Icons.access_time_rounded,
+                      title: 'Jam Buka',
+                      subtitle: faskes.operatingHours,
+                    ),
+                  ),
+                  Container(width: 1, height: 40, color: Colors.grey.shade200),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _InfoTile(
+                      icon: Icons.phone_rounded,
+                      title: 'Telepon',
+                      subtitle: faskes.emergencyContact,
+                    ),
+                  ),
+                ],
+              ),
+              
+              if (faskes.tbServices.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Layanan TBC',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: faskes.tbServices.map((svc) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        svc.serviceName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 24),
 
-          // Call to Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPhone,
-                  icon: const Icon(Icons.phone_rounded, size: 18),
-                  label: const Text(
-                    'Hubungi',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onPhone,
+                      icon: const Icon(Icons.phone_outlined, size: 18),
+                      label: const Text('Hubungi'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary.withOpacity(0.3), width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _catColor,
-                    side: BorderSide(color: _catColor, width: 2),
-                    minimumSize: const Size(0, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onDirections,
+                      icon: const Icon(Icons.directions_rounded, size: 18),
+                      label: const Text('Rute'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: onDirections,
-                  icon: const Icon(Icons.navigation_rounded, size: 18),
-                  label: const Text(
-                    'Petunjuk Arah',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _catColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 48),
-                    elevation: 4,
-                    shadowColor: _catColor.withOpacity(0.3),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Playful Stickers/Badges
-// ─────────────────────────────────────────────────────────────────────────────
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.color});
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-}
-
-class _BpjsBadge extends StatelessWidget {
-  const _BpjsBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFBEB),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0xFFF59E0B),
-            width: 1.2,
-          ),
-        ),
-        child: const Text(
-          'BPJS ✓',
-          style: TextStyle(
-            fontSize: 10,
-            color: Color(0xFFD97706),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Funky Information Tile
-// ─────────────────────────────────────────────────────────────────────────────
 class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.bg,
-  });
+  const _InfoTile({required this.icon, required this.title, required this.subtitle});
   final IconData icon;
-  final String label, value;
-  final Color color, bg;
+  final String title;
+  final String subtitle;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade500),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+      ],
+    );
+  }
 }

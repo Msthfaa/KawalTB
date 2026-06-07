@@ -149,102 +149,146 @@ class _KawalBottomNavBarState extends State<KawalBottomNavBar>
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 68,
-            decoration: BoxDecoration(
-              // Semi-transparent white surface for glassmorphism
-              color: Colors.white.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.7),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                  blurRadius: 32,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // ── Sliding active pill indicator ───────────────────────
-                Positioned.fill(
-                  top: 10,
-                  bottom: 10,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // Replicate spaceAround: center of item i =
-                      //   navWidth * (2i + 1) / (2 * n)
-                      final navWidth = constraints.maxWidth;
-                      final n = _navItems.length;
-                      return AnimatedBuilder(
-                        animation: _indicatorAnimation,
-                        builder: (context, _) {
-                          final i = _indicatorAnimation.value;
-                          final centerX = navWidth * (2 * i + 1) / (2 * n);
-                          const indicatorW = 48.0;
-                          return Align(
-                            alignment: Alignment.centerLeft,
-                            child: Transform.translate(
-                              offset: Offset(centerX - indicatorW / 2, 0),
-                              child: Container(
-                                width: indicatorW,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [AppColors.primary, AppColors.primaryLight],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primary.withValues(alpha: 0.35),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+    return SizedBox(
+      height: 90 + MediaQuery.of(context).padding.bottom,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          // ── Smooth Gradient Blur Background (fading up) ────────────
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black, Colors.black, Colors.transparent],
+                  stops: [0.0, 0.75, 1.0],
+                ).createShader(bounds),
+                blendMode: BlendMode.dstIn,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.white.withOpacity(0.95),
+                            Colors.white.withOpacity(0.6),
+                            Colors.white.withOpacity(0.0),
+                          ],
+                          stops: const [0.0, 0.6, 1.0],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-
-                // ── Nav items ───────────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: List.generate(_navItems.length, (i) {
-                    final isActive = widget.currentIndex == i;
-                    return _NavItemWidget(
-                      item: _navItems[i],
-                      isActive: isActive,
-                      scaleAnimation: _scaleAnimations[i],
-                      onTap: () => widget.onTap(i),
-                    );
-                  }),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+
+          // ── Nav Items Row (The Floating Pill) ───────────────────────
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 20,
+            left: 20,
+            right: 20,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.88),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.7),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.08),
+                        blurRadius: 32,
+                        offset: const Offset(0, 8),
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // ── Sliding active pill indicator ───────────────────────
+                      Positioned.fill(
+                        top: 10,
+                        bottom: 10,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Replicate spaceAround: center of item i =
+                            //   navWidth * (2i + 1) / (2 * n)
+                            final navWidth = constraints.maxWidth;
+                            final n = _navItems.length;
+                            return AnimatedBuilder(
+                              animation: _indicatorAnimation,
+                              builder: (context, _) {
+                                final i = _indicatorAnimation.value;
+                                final centerX = navWidth * (2 * i + 1) / (2 * n);
+                                const indicatorW = 48.0;
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Transform.translate(
+                                    offset: Offset(centerX - indicatorW / 2, 0),
+                                    child: Container(
+                                      width: indicatorW,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [AppColors.primary, AppColors.primaryLight],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.primary.withOpacity(0.35),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+
+                      // ── Nav items ───────────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: List.generate(_navItems.length, (i) {
+                          final isActive = widget.currentIndex == i;
+                          return _NavItemWidget(
+                            item: _navItems[i],
+                            isActive: isActive,
+                            scaleAnimation: _scaleAnimations[i],
+                            onTap: () => widget.onTap(i),
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
