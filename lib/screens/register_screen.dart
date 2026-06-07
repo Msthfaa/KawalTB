@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
 import '../widgets/kawal_logo.dart';
 import '../widgets/kawal_text_field.dart';
-import 'dashboard_screen.dart';
+import 'main_shell.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -66,7 +66,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Step 3: Navigate to Dashboard
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => const MainShell()),
       );
     } on AuthException catch (e) {
       if (!mounted) return;

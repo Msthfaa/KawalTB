@@ -5,11 +5,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
+import '../core/global_state.dart';
 import 'change_email_screen.dart';
 import 'change_password_screen.dart';
 import 'health_history_screen.dart';
 import 'notification_history_screen.dart';
 import 'login_screen.dart';
+import '../services/hive_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -123,6 +125,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_name', result);
         
+        // Update global state for auto-refresh
+        GlobalState.userNameNotifier.value = result;
+
         setState(() {
           userName = result;
         });
@@ -149,6 +154,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('avatar_path', pickedFile.path);
         
+        // Update global state for auto-refresh
+        GlobalState.avatarPathNotifier.value = pickedFile.path;
+
         setState(() {
           avatarPath = pickedFile.path;
         });
@@ -166,6 +174,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await supabase.auth.signOut();
+    
+    // Clear all local data to prevent leak to next user
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_name');
+    await prefs.remove('avatar_path');
+    await HiveService.instance.clearAll();
+
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,

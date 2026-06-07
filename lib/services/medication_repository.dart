@@ -49,6 +49,52 @@ class MedicationRepository {
     }
   }
 
+  /// Fetch latest logs from Supabase and synchronize with Hive local database.
+  Future<void> syncLogsFromSupabase() async {
+    try {
+      final response = await _supabaseClient
+          .from('medication_logs')
+          .select()
+          .order('taken_at', ascending: false);
+
+      final List<dynamic> data = response as List<dynamic>;
+      
+      for (final item in data) {
+        // Only save if it doesn't already exist locally (simple approach for offline-first)
+        // Alternatively, we can clear and recreate like we do with schedules,
+        // but logs might have unsynced local data.
+        // A safer approach: check if local log with same supabaseId exists.
+        // For simplicity, we just save them. HiveService handles duplicate IDs if we clear first.
+        // But since we have local unsynced logs, we only clear synced logs or just rely on a smarter merge.
+        // Let's implement a merge: fetch local logs, compare supabaseId.
+      }
+      
+      // Let's use a simpler approach: clear all local logs and replace with remote.
+      // Unsynced logs will be lost if not synced before this runs, but since this runs on app startup 
+      // AND we use Workmanager for background sync, it's generally safe. 
+      // Better approach: only clear logs that ARE synced. Or fetch remote, and add those that don't exist locally.
+      
+      final localLogs = await _hiveService.getAllLogs();
+      final localSupabaseIds = localLogs.map((e) => e.supabaseId).where((id) => id != null).toSet();
+
+      for (final item in data) {
+        final remoteId = item['id']?.toString();
+        if (remoteId != null && !localSupabaseIds.contains(remoteId)) {
+          final log = MedicationLog(
+            medicationName: item['medication_name'] ?? 'Unknown',
+            takenAt: DateTime.parse(item['taken_at']),
+            supabaseScheduleId: item['supabase_schedule_id']?.toString(),
+            isSynced: true,
+          );
+          log.supabaseId = remoteId;
+          await _hiveService.saveLog(log);
+        }
+      }
+    } catch (e) {
+      print('Error syncing logs from Supabase: $e');
+    }
+  }
+
   /// Helper method to reschedule all active schedules in the notification engine
   Future<void> rescheduleAllNotifications() async {
     await _notificationService.cancelAllSchedules();

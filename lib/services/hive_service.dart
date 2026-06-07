@@ -141,4 +141,11 @@ class HiveService {
     }
     await box.deleteAll(keysToDelete);
   }
+
+  Future<void> clearAll() async {
+    final scheduleBox = Hive.box<MedicationSchedule>('medication_schedules');
+    final logBox = Hive.box<MedicationLog>('medication_logs');
+    await scheduleBox.clear();
+    await logBox.clear();
+  }
 }

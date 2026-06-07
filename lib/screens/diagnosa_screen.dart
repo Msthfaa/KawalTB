@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
 import 'diagnosa_result_screen.dart';
 
@@ -16,7 +17,7 @@ class _DiagnosaScreenState extends State<DiagnosaScreen> {
   String? q4;
   String? q5;
 
-  void _submit() {
+  void _submit() async {
     if (q1 == null || q2 == null || q3 == null || q4 == null || q5 == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -30,12 +31,48 @@ class _DiagnosaScreenState extends State<DiagnosaScreen> {
     bool adaGejalaTambahan = (q3 == 'B' || q4 == 'B' || q5 == 'B');
     bool isPositive = (q1 == 'C') || (q2 == 'B') || (q1 == 'B' && adaGejalaTambahan);
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => DiagnosaResultScreen(isPositive: isPositive),
-      ),
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
     );
+
+    try {
+      final supabase = Supabase.instance.client;
+      // Build JSON of symptoms
+      final gejalaMap = {
+        'q1': q1,
+        'q2': q2,
+        'q3': q3,
+        'q4': q4,
+        'q5': q5,
+      };
+
+      // Ensure table riwayat_diagnosa exists or will be ignored safely
+      await supabase.from('riwayat_diagnosa').insert({
+        'tanggal_skrining': DateTime.now().toIso8601String().split('T').first,
+        'gejala_input': gejalaMap,
+        'hasil_evaluasi': isPositive ? 'Indikasi Tinggi' : 'Baik',
+        'rekomendasi': isPositive 
+            ? 'Segera kunjungi fasilitas kesehatan untuk pemeriksaan dahak (TCM).'
+            : 'Jaga kebersihan, olahraga teratur, dan makan makanan bergizi.',
+      });
+    } catch (e) {
+      print('Warning: Gagal menyimpan riwayat diagnosa ke Supabase: $e');
+    } finally {
+      if (mounted) {
+        // Pop loading dialog
+        Navigator.pop(context);
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DiagnosaResultScreen(isPositive: isPositive),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildRadioOption(String title, String value, String? groupValue, ValueChanged<String?> onChanged) {

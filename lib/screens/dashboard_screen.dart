@@ -17,6 +17,7 @@ import 'berita_list_screen.dart';
 import 'diagnosa_detail_screen.dart';
 import 'main_shell.dart';
 import 'notification_history_screen.dart';
+import '../core/global_state.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -51,10 +52,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _logSubscription = Hive.box<MedicationLog>('medication_logs').watch().listen((_) {
       _loadData();
     });
+
+    GlobalState.userNameNotifier.addListener(_onGlobalStateChanged);
+    GlobalState.avatarPathNotifier.addListener(_onGlobalStateChanged);
+  }
+
+  void _onGlobalStateChanged() {
+    if (mounted) {
+      setState(() {
+        _userName = GlobalState.userNameNotifier.value.split(' ').first;
+        _avatarPath = GlobalState.avatarPathNotifier.value;
+      });
+    }
   }
 
   @override
   void dispose() {
+    GlobalState.userNameNotifier.removeListener(_onGlobalStateChanged);
+    GlobalState.avatarPathNotifier.removeListener(_onGlobalStateChanged);
     _scheduleSubscription?.cancel();
     _logSubscription?.cancel();
     super.dispose();
@@ -63,9 +78,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadUserName() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final fullName = prefs.getString('user_name') ?? 'Budi Santoso';
+      final fullName = prefs.getString('user_name') ?? 'Pengguna';
       final firstName = fullName.split(' ').first;
       final avatar = prefs.getString('avatar_path');
+      
+      // Initialize global state with current prefs
+      GlobalState.userNameNotifier.value = fullName;
+      GlobalState.avatarPathNotifier.value = avatar;
+
       if (mounted) {
         setState(() {
           _userName = firstName;

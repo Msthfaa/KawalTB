@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'screens/login_screen.dart';
+import 'screens/main_shell.dart';
 import 'services/hive_service.dart';
 import 'services/notification_service.dart';
 import 'services/sync_service.dart';
@@ -32,6 +33,9 @@ Future<void> main() async {
   MedicationRepository.instance.syncSchedulesFromSupabase().catchError((e) {
     print('Initial schedules sync skipped: $e');
   });
+  MedicationRepository.instance.syncLogsFromSupabase().catchError((e) {
+    print('Initial logs sync skipped: $e');
+  });
 
   // Set status bar style to match the light background
   SystemChrome.setSystemUIOverlayStyle(
@@ -49,11 +53,13 @@ class KawalTBApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = Supabase.instance.client.auth.currentSession;
+    
     return MaterialApp(
       title: 'Kawal TB',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const LoginScreen(),
+      home: session != null ? const MainShell() : const LoginScreen(),
     );
   }
 }
